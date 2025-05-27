@@ -2,6 +2,21 @@
 
 A modular and extensible PyTorch project for training, evaluating, and extending neural network architectures on the CIFAR-10 dataset.
 
+## 📦 Project Status
+
+✅ Current features:
+- CIFAR-10 dataset loading and normalization
+- Config-driven training pipeline
+- Fully configurable model architecture (MLP)
+- Reproducible training (seed, deterministic workers)
+- TensorBoard logging
+- Model saving with early stopping
+
+🚧 Planned next:
+- Evaluation notebook
+- Prediction utilities
+- CLI interface (optional)
+
 ## 📁 Project Structure
 
 ```

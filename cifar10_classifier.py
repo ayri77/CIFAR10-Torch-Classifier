@@ -1,34 +1,51 @@
 from cifar10_model import CIFAR10_torch
-import torch
-import torch.nn as nn
+import config
+
 import operator 
 from functools import reduce
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchinfo import summary
+from torch.utils.tensorboard import SummaryWriter
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import torch.optim as optim
+from sklearn.metrics import confusion_matrix
 
+import os
+import time
 
 class CIFAR10Classifier:
     def __init__(
             self, 
-            name="fc_model", 
+            name: str, 
             input_shape=(3, 32, 32), 
-            num_classes=10, 
-            hidden_layers=[512, 256, 128], 
-            dropout_rate=[0.3,0.3,0.3], 
-            activation_fn = nn.ReLU, 
-            lr=0.01, 
-            device=None):
+            num_classes=config.NUM_CLASSES, 
+            hidden_layers=config.HIDDEN_LAYERS, 
+            dropout_rate=config.DROPOUT_RATES, 
+            activation_fn_name = config.ACTIVATION_FN, 
+            device=None,
+            optimizer_name=config.OPTIMIZER,
+            optimizer_kwargs=config.OPTIMIZER_KWARGS,
+            criterion_name=config.CRITERION,
+            criterion_kwargs=config.CRITERION_KWARGS,
+        ):
         
         self.name = name
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.hidden_layers = hidden_layers
         self.dropout_rate = dropout_rate
-        self.activation_fn = activation_fn
-        self.lr = lr
+        self.activation_fn_name = activation_fn_name
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.optimizer_name = optimizer_name
+        self.optimizer_kwargs = optimizer_kwargs
+        self.criterion_name = criterion_name
+        self.criterion_kwargs = criterion_kwargs
+
 
     def build_model(self):
         input_size = reduce(operator.mul, self.input_shape)
@@ -37,36 +54,62 @@ class CIFAR10Classifier:
             num_classes=self.num_classes,
             hidden_layers=self.hidden_layers,
             dropout_rate=self.dropout_rate,
-            activation_fn=self.activation_fn
+            activation_fn=getattr(nn, self.activation_fn_name)
             )        
         self.model.to(self.device)          
 
-    def compile(self,
-            criterion=nn.CrossEntropyLoss, 
-            optimizer=optim.SGD, 
-            optimizer_kwargs={}, 
-            criterion_kwargs={}):
-        # loss function
-        self.criterion = criterion(**criterion_kwargs)
-        # optimizer
-        self.optimizer = optimizer(self.model.parameters(), **optimizer_kwargs)        
-
-    def train(self, train_loader, val_loader, num_epochs=10, early_stopping=True, patience=30, verbose=True, log_tensorboard=False,):
-        import os
-        import time
-
-        os.makedirs("models", exist_ok=True)
-        if log_tensorboard:
-            from torch.utils.tensorboard import SummaryWriter
-            writer = SummaryWriter()        
+    def compile(self):
+        if self.optimizer_name == "Adam":
+            self.optimizer = torch.optim.Adam(self.model.parameters(), **self.optimizer_kwargs)
+        elif self.optimizer_name == "SGD":
+            self.optimizer = torch.optim.SGD(self.model.parameters(), **self.optimizer_kwargs)
+        else:
+            raise ValueError(f"Unsupported optimizer: {self.optimizer_name}")
         
-        start_time = time.time() 
+        if self.criterion_name == "CrossEntropyLoss":
+            self.criterion = nn.CrossEntropyLoss(**self.criterion_kwargs)
+        else:
+            raise ValueError(f"Unsupported criterion: {self.criterion_name}")
+
+
+    def train(
+            self, 
+            train_loader, 
+            val_loader, 
+            num_epochs: int = config.NUM_EPOCHS,
+            early_stopping: bool = True,
+            patience: int = config.PATIENCE,
+            verbose: bool = True,
+            log_tensorboard: bool = config.LOG_TENSORBOARD
+        ):
+
+        os.makedirs(f"models/{self.name}", exist_ok=True)
+
+        if log_tensorboard:           
+            writer = SummaryWriter()
+
+        print("\n" + "="*60)
+        print("🚀 Training configuration:")
+        print(f"📦 Model name:        {self.name}")
+        print(f"📐 Input shape:       {self.input_shape}")
+        print(f"🔢 Hidden layers:     {self.hidden_layers}")
+        print(f"🎛 Dropout rates:     {self.dropout_rate}")
+        print(f"⚙️ Activation:        {self.activation_fn_name}")
+        print(f"📈 Optimizer:         {self.optimizer_name} {self.optimizer_kwargs}")
+        print(f"🎯 Criterion:         {self.criterion_name} {self.criterion_kwargs}")
+        print(f"🧠 Device:            {self.device}")
+        print(f"📊 Epochs:            {num_epochs}")
+        print(f"🪄 Early stopping:    {early_stopping} (patience={patience})")
+        print("="*60 + "\n")
+
+        overall_start_time = time.time()
         best_accuracy = 0
-        # Early stopping
         best_val_loss = float('inf')
         patience_counter = 0 
 
         for epoch in range(num_epochs):
+            epoch_start_time = time.time()
+
             self.model.train()
             train_loss = 0
             train_correct = 0
@@ -85,9 +128,6 @@ class CIFAR10Classifier:
                 train_total += y_batch.size(0)
 
             train_accuracy = train_correct / train_total
-            if log_tensorboard:
-                writer.add_scalar("Accuracy/train", train_accuracy, epoch)
-                writer.add_scalar("Loss/train", train_loss / len(train_loader), epoch)
 
             self.model.eval()
             val_loss = 0 
@@ -103,17 +143,24 @@ class CIFAR10Classifier:
                     _, predicted = torch.max(outputs, 1)
                     total += y_batch.size(0)
                     correct += (predicted == y_batch).sum().item()
-                val_accuracy = correct/total
 
-                if log_tensorboard:
-                    writer.add_scalar("Loss/val", val_loss / len(val_loader), epoch)
-                    writer.add_scalar("Accuracy/val", val_accuracy, epoch)    
-                
-                if verbose:
-                    print(f"Epoch [{epoch+1}/{num_epochs}]. Train loss: {train_loss/len(train_loader):.4f}. "
-                        f"Train acc: {train_accuracy:.4f}. "
-                        f"Val loss: {val_loss/len(val_loader):.4f}. Val acc: {val_accuracy:.4f}")
-            
+            val_accuracy = correct / total
+            epoch_time = time.time() - epoch_start_time
+
+            if log_tensorboard:
+                writer.add_scalar("Loss/train", train_loss / len(train_loader), epoch)
+                writer.add_scalar("Accuracy/train", train_accuracy, epoch)
+                writer.add_scalar("Loss/val", val_loss / len(val_loader), epoch)
+                writer.add_scalar("Accuracy/val", val_accuracy, epoch)
+                writer.add_scalar("Time/epoch_seconds", epoch_time, epoch)
+
+            if verbose:
+                print(f"[{epoch+1}/{num_epochs}] "
+                    f"Train loss: {train_loss/len(train_loader):.4f}, acc: {train_accuracy:.4f} | "
+                    f"Val loss: {val_loss/len(val_loader):.4f}, acc: {val_accuracy:.4f} | "
+                    f"🕒 {epoch_time:.2f}s")
+
+            # Early stopping logic
             if early_stopping:
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
@@ -124,7 +171,7 @@ class CIFAR10Classifier:
                         'optimizer_state_dict': self.optimizer.state_dict(),
                         'val_loss': val_loss,
                         'val_accuracy': val_accuracy
-                    }, os.path.join("models", "best_model.pth"))
+                    }, os.path.join("models", self.name, f"{self.name}_best_model.pth"))
                 else:
                     patience_counter += 1
                     if patience_counter >= patience:
@@ -138,28 +185,17 @@ class CIFAR10Classifier:
                         'model_state_dict': self.model.state_dict(),
                         'optimizer_state_dict': self.optimizer.state_dict(),
                         'val_accuracy': val_accuracy
-                    }, os.path.join("models", "best_model.pth"))
+                    }, os.path.join("models", self.name, f"{self.name}_best_model.pth"))
 
-                
         if log_tensorboard:
             writer.close()
 
-        end_time = time.time()
-        total_time = end_time - start_time
-
-        print("\n" + "="*50)
-        print(f"🏷️ Model: {self.name}")
-        print(f"🔢 Hidden layers: {self.hidden_layers}")
-        print(f"🎛️ Dropout: {self.dropout_rate}")
-        print(f"⚙️ Activation: {self.activation_fn.__name__}")
-        print(f"📦 Optimizer: {type(self.optimizer).__name__}")
-        print(f"🧠 Device: {self.device}")
-        print(f"📈 Epochs: {num_epochs}")
+        total_time = time.time() - overall_start_time
+        print("\n✅ Training finished!")
         print(f"🕒 Total training time: {total_time:.2f} seconds")
-        print("="*50)
-        
+        print("="*60)        
 
-    def evaluate(self, data_loader):
+    def evaluate(self, data_loader, verbose=True):
         self.model.eval()
         total_loss = 0
         correct = 0
@@ -181,12 +217,17 @@ class CIFAR10Classifier:
         accuracy = correct / total
         avg_loss = total_loss / len(data_loader)
 
+        if verbose:
+            print(f"Validation loss: {avg_loss:.4f}, accuracy: {accuracy:.4f}")
+
         return {"loss": avg_loss, "accuracy": accuracy}
+
     
     def predict(self, data_loader):
         with torch.no_grad():
             outputs = []
-            for X_batch in data_loader:
+            for batch in data_loader:
+                X_batch = batch[0] if isinstance(batch, (tuple, list)) else batch
                 X_batch = X_batch.to(self.device)
                 outputs.append(self.model(X_batch))
 
@@ -196,8 +237,6 @@ class CIFAR10Classifier:
         # plot the confusion matrix
         # y_pred_classes: predicted classes
         # y_true: true classes
-        import seaborn as sns
-        from sklearn.metrics import confusion_matrix
 
         cm = confusion_matrix(y_true, y_pred_classes)
         plt.figure(figsize=(8,6))
@@ -214,8 +253,10 @@ class CIFAR10Classifier:
         self.model.load_state_dict(torch.load(path))
         self.model.to(self.device)
 
-    def summary(self):
-        from torchinfo import summary
+    def load_best_model(self, path):
+        self.load(f"models/{self.name}/best_model.pth")
+
+    def summary(self):        
         if not hasattr(self, "model"):
             print("⚠️ Model is not built yet.")
             return

@@ -17,6 +17,7 @@ from sklearn.metrics import confusion_matrix
 
 import os
 import time
+import json
 
 class CIFAR10Classifier:
     def __init__(
@@ -71,7 +72,6 @@ class CIFAR10Classifier:
         else:
             raise ValueError(f"Unsupported criterion: {self.criterion_name}")
 
-
     def train(
             self, 
             train_loader, 
@@ -106,6 +106,9 @@ class CIFAR10Classifier:
         best_accuracy = 0
         best_val_loss = float('inf')
         patience_counter = 0 
+
+        history = []
+
 
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
@@ -146,6 +149,15 @@ class CIFAR10Classifier:
 
             val_accuracy = correct / total
             epoch_time = time.time() - epoch_start_time
+
+            history.append({
+                "epoch": epoch + 1,
+                "epoch_time": epoch_time,
+                "train_loss": round(train_loss / len(train_loader), 4),
+                "train_accuracy": round(train_accuracy, 4),
+                "val_loss": round(val_loss / len(val_loader), 4),
+                "val_accuracy": round(val_accuracy, 4),
+            })            
 
             if log_tensorboard:
                 writer.add_scalar("Loss/train", train_loss / len(train_loader), epoch)
@@ -190,6 +202,36 @@ class CIFAR10Classifier:
         if log_tensorboard:
             writer.close()
 
+        # save the history
+        metrics_path = os.path.join("models", self.name,  f"{self.name}_metrics.json")
+        with open(metrics_path, "w") as f:
+            json.dump(history, f, indent=4)  
+            print(f"Metrics saved to {metrics_path}")
+        
+
+        # save the config
+        config_dict = {
+            "model_name": self.name,
+            "input_shape": self.input_shape,
+            "num_classes": self.num_classes,
+            "hidden_layers": self.hidden_layers,
+            "dropout_rates": self.dropout_rate,
+            "activation": self.activation_fn_name,
+            "optimizer": self.optimizer_name,
+            "optimizer_kwargs": self.optimizer_kwargs,
+            "criterion": self.criterion_name,
+            "criterion_kwargs": self.criterion_kwargs,
+            "device": str(self.device),
+            "num_epochs": num_epochs,
+            "early_stopping": early_stopping,
+            "patience": patience
+        }
+
+        config_path = os.path.join("models", self.name,  f"{self.name}_config.json")
+        with open(config_path, "w") as f:
+            json.dump(config_dict, f, indent=4)              
+            print(f"Config saved to {config_path}")
+
         total_time = time.time() - overall_start_time
         print("\n✅ Training finished!")
         print(f"🕒 Total training time: {total_time:.2f} seconds")
@@ -221,7 +263,6 @@ class CIFAR10Classifier:
             print(f"Validation loss: {avg_loss:.4f}, accuracy: {accuracy:.4f}")
 
         return {"loss": avg_loss, "accuracy": accuracy}
-
     
     def predict(self, data_loader):
         with torch.no_grad():

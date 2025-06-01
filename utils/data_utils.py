@@ -24,6 +24,7 @@ def compute_mean_std(dataset, batch_size=512):
 def get_transforms(mean, std):
     print("🧪 Creating normalization transform...")
     return transforms.Compose([
+        transforms.Resize((32, 32)),
         transforms.ToTensor(),
         transforms.Normalize(mean.tolist(), std.tolist())
     ])

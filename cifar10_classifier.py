@@ -18,6 +18,8 @@ from sklearn.metrics import confusion_matrix
 import os
 import time
 import json
+from pathlib import Path
+from PIL import Image
 
 from utils import show_random_samples, show_class_distribution, plot_training_history
 
@@ -52,6 +54,7 @@ class CIFAR10Classifier:
         self.criterion_kwargs = criterion_kwargs
         self.mean = mean
         self.std = std
+    
     def build_model(self):
         input_size = reduce(operator.mul, self.input_shape)
         self.model = CIFAR10_torch(
@@ -277,16 +280,6 @@ class CIFAR10Classifier:
             "y_pred": all_preds,
             "y_true": all_labels
         }
-    
-    def predict(self, data_loader):
-        with torch.no_grad():
-            outputs = []
-            for batch in data_loader:
-                X_batch = batch[0] if isinstance(batch, (tuple, list)) else batch
-                X_batch = X_batch.to(self.device)
-                outputs.append(self.model(X_batch))
-
-        return outputs
 
     def summary(self):        
         if not hasattr(self, "model"):
@@ -294,8 +287,69 @@ class CIFAR10Classifier:
             return
 
         input_size = (1, *self.input_shape)  # e.g., (1, 3, 32, 32)
-        return summary(self.model, input_size=input_size, device=self.device)
+        return summary(self.model, input_size=input_size, device=self.device)    
+# --------------------------------------------------------
+# Predictions
+# --------------------------------------------------------
+    def predict_image(self, path: str, transform, class_names: list, show_image: bool = True):
+        # predict the image
+        # path: path to the image
+        # transform: transform to apply to the image
+        # class_names: list of class names
+        # return: predicted class name
+        self.model.eval()
+        with torch.no_grad():
+            image = Image.open(path).convert("RGB")
+            image_tensor = transform(image).unsqueeze(0).to(self.device)
+            output = self.model(image_tensor)
+            _, predicted = torch.max(output, 1)
+            pred_class = class_names[predicted.item()]
+
+            if show_image:
+                plt.imshow(image)
+                plt.title(f"Predicted: {pred_class}")
+                plt.axis("off")
+                plt.show()
+            return pred_class
+
+    def predict_images(self, directory: str, transform, class_names: list, show_images: bool = True, n_cols: int = 5):
+        # predict the images
+        # directory: directory of the images
+        # transform: transform to apply to the images
+        # class_names: list of class names
+        # return: list of predicted class names
+
+        def get_image_paths_from_directory(directory: str, extensions={".jpg", ".jpeg", ".png"}) -> list:
+            return [str(p) for p in Path(directory).rglob("*") if p.suffix.lower() in extensions]
+
+        image_paths = get_image_paths_from_directory(directory)
+        predictions = []
+
+        if show_images:
+            n_rows = (len(image_paths) + n_cols - 1) // n_cols
+            plt.figure(figsize=(4 * n_cols, 4 * n_rows))
+
+        for i, path in enumerate(image_paths):
+            pred = self.predict_image(path, transform, class_names, show_image=False)
+            predictions.append((path, pred))
+
+            if show_images:
+                img = Image.open(path)
+                plt.subplot(n_rows, n_cols, i + 1)
+                plt.imshow(img)
+                plt.axis("off")
+                plt.title(f"Predicted: {pred}")
+
+        if show_images:
+            plt.tight_layout()
+            plt.show()
+
+        return predictions
     
+# --------------------------------------------------------
+# Save and load
+# --------------------------------------------------------
+
     def save(self, path):
         torch.save(self.model.state_dict(), path)
 
@@ -338,6 +392,10 @@ class CIFAR10Classifier:
         # load the metrics
         # metrics_path: path to load the metrics
         return json.load(open(metrics_path))
+
+# --------------------------------------------------------
+# Plotting
+# --------------------------------------------------------
 
     def plot_training_history(self, metrics_path):
         # load the metrics

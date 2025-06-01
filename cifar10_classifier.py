@@ -1,4 +1,4 @@
-from cifar10_model import CIFAR10_torch
+from cifar10_model import CIFAR10_torch, CIFAR10_CNN
 import config
 
 import operator 
@@ -11,15 +11,14 @@ from torchinfo import summary
 from torch.utils.tensorboard import SummaryWriter
 
 import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-from sklearn.metrics import confusion_matrix
 
 import os
 import time
 import json
 from pathlib import Path
 from PIL import Image
+
+import inspect
 
 from utils import show_random_samples, show_class_distribution, plot_training_history
 
@@ -29,9 +28,9 @@ class CIFAR10Classifier:
             name: str, 
             input_shape=(3, 32, 32), 
             num_classes=config.NUM_CLASSES, 
-            hidden_layers=config.HIDDEN_LAYERS, 
-            dropout_rates=config.DROPOUT_RATES, 
             activation_fn_name = config.ACTIVATION_FN, 
+            model_class=None,
+            model_kwargs=None,            
             device=None,
             optimizer_name=config.OPTIMIZER,
             optimizer_kwargs=config.OPTIMIZER_KWARGS,
@@ -44,9 +43,10 @@ class CIFAR10Classifier:
         self.name = name
         self.input_shape = input_shape
         self.num_classes = num_classes
-        self.hidden_layers = hidden_layers
-        self.dropout_rates = dropout_rates
         self.activation_fn_name = activation_fn_name
+        self.model_class = model_class or CIFAR10_torch
+        self.model_kwargs = model_kwargs or {}
+
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.optimizer_name = optimizer_name
         self.optimizer_kwargs = optimizer_kwargs
@@ -56,15 +56,25 @@ class CIFAR10Classifier:
         self.std = std
     
     def build_model(self):
-        input_size = reduce(operator.mul, self.input_shape)
-        self.model = CIFAR10_torch(
-            input_size=input_size,
-            num_classes=self.num_classes,
-            hidden_layers=self.hidden_layers,
-            dropout_rates=self.dropout_rates,
-            activation_fn=getattr(nn, self.activation_fn_name)
-            )        
-        self.model.to(self.device)          
+        # Base kwargs, shared
+        base_kwargs = {
+            "input_size": reduce(operator.mul, self.input_shape),
+            "input_shape": self.input_shape,
+            "num_classes": self.num_classes,
+            "activation_fn": getattr(nn, self.activation_fn_name),
+        }
+
+        # Merge and filter kwargs based on model_class's signature
+        all_kwargs = {**base_kwargs, **self.model_kwargs}
+        model_signature = inspect.signature(self.model_class.__init__)
+        valid_keys = model_signature.parameters.keys()
+        filtered_kwargs = {
+            k: v for k, v in all_kwargs.items() if k in valid_keys
+        }
+
+        self.model = self.model_class(**filtered_kwargs)
+        self.model.to(self.device)     
+
 
     def compile(self):
         if self.optimizer_name == "Adam":
@@ -97,10 +107,19 @@ class CIFAR10Classifier:
 
         print("\n" + "="*60)
         print("🚀 Training configuration:")
+        print(f"🧱 Architecture:       {type(self.model).__name__}")
         print(f"📦 Model name:        {self.name}")
         print(f"📐 Input shape:       {self.input_shape}")
-        print(f"🔢 Hidden layers:     {self.hidden_layers}")
-        print(f"🎛 Dropout rates:     {self.dropout_rates}")
+
+        if isinstance(self.model, CIFAR10_CNN):
+            print(f"🔷 Conv layers:        {self.model_kwargs.get('conv_layers')}")
+            print(f"🔢 FC layers:          {self.model_kwargs.get('fc_layers')}")
+            print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
+        elif isinstance(self.model, CIFAR10_torch):
+            print(f"🔢 Hidden layers:      {self.model_kwargs.get('hidden_layers')}")
+            print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
+
+
         print(f"⚙️ Activation:        {self.activation_fn_name}")
         print(f"📈 Optimizer:         {self.optimizer_name} {self.optimizer_kwargs}")
         print(f"🎯 Criterion:         {self.criterion_name} {self.criterion_kwargs}")
@@ -115,8 +134,6 @@ class CIFAR10Classifier:
         patience_counter = 0 
 
         history = []
-
-
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
 
@@ -220,8 +237,6 @@ class CIFAR10Classifier:
             "model_name": self.name,
             "input_shape": self.input_shape,
             "num_classes": self.num_classes,
-            "hidden_layers": self.hidden_layers,
-            "dropout_rates": self.dropout_rates,
             "activation": self.activation_fn_name,
             "optimizer": self.optimizer_name,
             "optimizer_kwargs": self.optimizer_kwargs,
@@ -234,6 +249,15 @@ class CIFAR10Classifier:
             "mean": self.mean,
             "std": self.std
         }
+
+        # Detect CNN-style model and store relevant architecture fields
+        if isinstance(self.model, CIFAR10_CNN):
+            config_dict["conv_layers"] = self.model_kwargs.get('conv_layers')
+            config_dict["fc_layers"] = self.model_kwargs.get('fc_layers')
+            config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
+        elif isinstance(self.model, CIFAR10_torch):
+            config_dict["hidden_layers"] = self.model_kwargs.get('hidden_layers')
+            config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
 
         config_path = os.path.join("models", self.name,  f"{self.name}_config.json")
         with open(config_path, "w") as f:
@@ -361,14 +385,30 @@ class CIFAR10Classifier:
     @classmethod
     def load_model(cls, model_name, config_path, model_path):
         cfg = cls.load_config(config_path)
+
+        if "conv_layers" in cfg and "fc_layers" in cfg:
+            model_class = CIFAR10_CNN
+            model_kwargs = {
+                "conv_layers": cfg["conv_layers"],
+                "fc_layers": cfg["fc_layers"],
+                "dropout_rates": cfg.get("dropout_rates", []),
+                "activation_fn": getattr(nn, cfg.get("activation", "ReLU"))
+            }
+        else:
+            model_class = CIFAR10_torch
+            model_kwargs = {
+                "hidden_layers": cfg["hidden_layers"],
+                "dropout_rates": cfg.get("dropout_rates", []),
+                "activation_fn": getattr(nn, cfg.get("activation", "ReLU"))
+            }
         model = cls(
             name=model_name,
+            model_class=model_class,
+            model_kwargs=model_kwargs,
             input_shape=tuple(cfg["input_shape"]),
             num_classes=cfg["num_classes"],
-            hidden_layers=cfg["hidden_layers"],
-            dropout_rates=cfg["dropout_rates"],
-            activation_fn_name=cfg["activation"],
-            device=cfg.get("device", "cpu"),  # fallback to cpu
+            activation_fn_name=cfg.get("activation", "ReLU"),
+            device=cfg.get("device", "cpu"),
             optimizer_name=cfg.get("optimizer", "Adam"),
             optimizer_kwargs=cfg.get("optimizer_kwargs", {}),
             criterion_name=cfg.get("criterion", "CrossEntropyLoss"),

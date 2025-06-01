@@ -19,6 +19,8 @@ import os
 import time
 import json
 
+from utils import show_random_samples, show_class_distribution, plot_training_history
+
 class CIFAR10Classifier:
     def __init__(
             self, 
@@ -209,7 +211,6 @@ class CIFAR10Classifier:
         with open(metrics_path, "w") as f:
             json.dump(history, f, indent=4)  
             print(f"Metrics saved to {metrics_path}")
-        
 
         # save the config
         config_dict = {
@@ -338,6 +339,12 @@ class CIFAR10Classifier:
         # metrics_path: path to load the metrics
         return json.load(open(metrics_path))
 
+    def plot_training_history(self, metrics_path):
+        # load the metrics
+        # metrics_path: path to load the metrics
+        metrics = self.load_metrics(metrics_path)
+        plot_training_history(metrics, save_path=os.path.join("models", self.name, f"{self.name}_metrics.png"))
+
     def plot_confusion_matrix(self, y_pred_classes, y_true, class_names=None, normalize=False):
         from sklearn.metrics import confusion_matrix
         import seaborn as sns
@@ -352,7 +359,6 @@ class CIFAR10Classifier:
         plt.ylabel("True")
         plt.title("Confusion Matrix")
         plt.show()
-
    
     def show_misclassified(self, data_loader, class_names=None, max_images=10):
         self.model.eval()

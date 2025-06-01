@@ -66,3 +66,44 @@ def show_class_distribution(dataset, class_names):
     plt.ylabel("Count")
     plt.tight_layout()
     plt.show()
+
+def plot_training_history(history, save_path=None):
+    """
+    Plots training and validation loss and accuracy from history list.
+
+    Args:
+        history (List[Dict]): Training log containing epoch-level metrics.
+        save_path (str, optional): Path to save the figure. Defaults to None.
+    """
+    epochs = [entry["epoch"] for entry in history]
+    train_loss = [entry["train_loss"] for entry in history]
+    val_loss = [entry["val_loss"] for entry in history]
+    train_acc = [entry["train_accuracy"] for entry in history]
+    val_acc = [entry["val_accuracy"] for entry in history]
+
+    plt.figure(figsize=(12, 5))
+
+    # Plot loss
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_loss, label="Train Loss")
+    plt.plot(epochs, val_loss, label="Val Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss per Epoch")
+    plt.legend()
+
+    # Plot accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_acc, label="Train Accuracy")
+    plt.plot(epochs, val_acc, label="Val Accuracy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.title("Accuracy per Epoch")
+    plt.legend()
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        print(f"📊 Training plot saved to {save_path}")
+    else:
+        plt.show()

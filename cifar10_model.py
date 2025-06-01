@@ -8,7 +8,7 @@ class CIFAR10_torch(nn.Module):
             input_size, 
             num_classes, 
             hidden_layers, 
-            dropout_rate, 
+            dropout_rates, 
             activation_fn
         ):
                 
@@ -21,7 +21,7 @@ class CIFAR10_torch(nn.Module):
             layers.append(nn.Linear(prev_units,units))
             layers.append(nn.BatchNorm1d(units))
             layers.append(activation_fn())
-            layers.append(nn.Dropout(dropout_rate[idx]))
+            layers.append(nn.Dropout(dropout_rates[idx]))
             prev_units = units
 
         self.hidden_layers = nn.Sequential(*layers)

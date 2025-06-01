@@ -29,11 +29,22 @@ def get_transforms(mean, std):
     ])
 
 
-def load_cifar10_datasets(data_dir="./data", transform=None):
-    print("📥 Downloading/loading CIFAR-10 datasets...")
-    train_dataset = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
-    print(f"✅ Loaded training samples: {len(train_dataset)}, test samples: {len(test_dataset)}")
+def load_cifar10_datasets(data_dir="./data", transform=None, subset="full"):
+    print(f"📥 Downloading/loading CIFAR-10 datasets... Loading {subset} dataset")
+    if subset == "full":
+        train_dataset = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
+        test_dataset = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
+    elif subset == "train":
+        train_dataset = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
+        test_dataset = None
+    elif subset == "test":
+        train_dataset = None
+        test_dataset = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
+
+    if train_dataset is not None:
+        print(f"✅ Loaded training samples: {len(train_dataset)}")
+    if test_dataset is not None:
+        print(f"✅ Loaded test samples: {len(test_dataset)}")
     return train_dataset, test_dataset
 
 
@@ -46,34 +57,43 @@ def split_train_val(train_dataset, split_ratio=0.8):
     return random_split(train_dataset, [train_len, val_len])
 
 
-def create_loaders(train_subset, val_subset, test_dataset, batch_size=64, num_workers=4):
+def create_loaders(train_subset=None, val_subset=None, test_dataset=None, batch_size=64, num_workers=4):
     print(f"📦 Creating data loaders with batch size {batch_size}...")
-    train_loader = DataLoader(
-        train_subset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
+    if train_subset is None:
+        train_loader = None
+    else:
+        train_loader = DataLoader(
+            train_subset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
         pin_memory=config.PIN_MEMORY,
         worker_init_fn=seed_worker,
         prefetch_factor=2
-    )
+        )
 
-    val_loader = DataLoader(
-        val_subset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=config.PIN_MEMORY,
+    if val_subset is None:
+        val_loader = None
+    else:
+        val_loader = DataLoader(
+            val_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=config.PIN_MEMORY,
         worker_init_fn=seed_worker,
         prefetch_factor=2
-    )
+        )
 
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=config.PIN_MEMORY,
+    if test_dataset is None:
+        test_loader = None
+    else:
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=config.PIN_MEMORY,
         worker_init_fn=seed_worker,
         prefetch_factor=2
     )

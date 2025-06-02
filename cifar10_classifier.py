@@ -267,6 +267,10 @@ class CIFAR10Classifier:
         total_time = time.time() - overall_start_time
         print("\n✅ Training finished!")
         print(f"🕒 Total training time: {total_time:.2f} seconds")
+        if history:
+            best_epoch = max(history, key=lambda e: e['val_accuracy'])
+            print("\n📈 Best validation accuracy:")
+            print(f"🏆 Epoch {best_epoch['epoch']} — acc: {best_epoch['val_accuracy']:.4f}, loss: {best_epoch['val_loss']:.4f}")
         print("="*60)        
 
     def evaluate(self, data_loader, verbose=True):

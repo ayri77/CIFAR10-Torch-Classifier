@@ -1,4 +1,4 @@
-from cifar10_model import CIFAR10_torch, CIFAR10_CNN
+from cifar10_model import CIFAR10_FC, CIFAR10_CNN
 import config
 
 import operator 
@@ -44,7 +44,7 @@ class CIFAR10Classifier:
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.activation_fn_name = activation_fn_name
-        self.model_class = model_class or CIFAR10_torch
+        self.model_class = model_class or CIFAR10_FC
         self.model_kwargs = model_kwargs or {}
 
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -115,7 +115,7 @@ class CIFAR10Classifier:
             print(f"🔷 Conv layers:        {self.model_kwargs.get('conv_layers')}")
             print(f"🔢 FC layers:          {self.model_kwargs.get('fc_layers')}")
             print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
-        elif isinstance(self.model, CIFAR10_torch):
+        elif isinstance(self.model, CIFAR10_FC):
             print(f"🔢 Hidden layers:      {self.model_kwargs.get('hidden_layers')}")
             print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
 
@@ -255,7 +255,7 @@ class CIFAR10Classifier:
             config_dict["conv_layers"] = self.model_kwargs.get('conv_layers')
             config_dict["fc_layers"] = self.model_kwargs.get('fc_layers')
             config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
-        elif isinstance(self.model, CIFAR10_torch):
+        elif isinstance(self.model, CIFAR10_FC):
             config_dict["hidden_layers"] = self.model_kwargs.get('hidden_layers')
             config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
 
@@ -395,7 +395,7 @@ class CIFAR10Classifier:
                 "activation_fn": getattr(nn, cfg.get("activation", "ReLU"))
             }
         else:
-            model_class = CIFAR10_torch
+            model_class = CIFAR10_FC
             model_kwargs = {
                 "hidden_layers": cfg["hidden_layers"],
                 "dropout_rates": cfg.get("dropout_rates", []),

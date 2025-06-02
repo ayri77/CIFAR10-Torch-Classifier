@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 import torch
 
 # class
-class CIFAR10_torch(nn.Module):
+class CIFAR10_FC(nn.Module):
     def __init__(
             self, 
             input_size, 
@@ -14,7 +14,7 @@ class CIFAR10_torch(nn.Module):
             activation_fn
         ):
                 
-        super(CIFAR10_torch, self).__init__()
+        super(CIFAR10_FC, self).__init__()
 
         self.fl = nn.Flatten()
         layers = []

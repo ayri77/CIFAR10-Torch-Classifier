@@ -1,0 +1,10 @@
+{
+    "model_type": "CIFAR10_CNN",
+    "conv_layers": [
+        {"out_channels": 32, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true},
+        {"out_channels": 64, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true},
+        {"out_channels": 128, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true}
+    ],
+    "fc_layers": [512, 256],
+    "dropout_rates": [0.5, 0.3]
+}

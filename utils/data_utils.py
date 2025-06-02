@@ -1,9 +1,17 @@
 import torch
 import numpy as np
 import random
+import os
+import sys
+import json
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 import config
+
+from cifar10_classifier import CIFAR10Classifier
+
+project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+sys.path.append(project_root)
 
 def compute_mean_std(dataset, batch_size=512):
     print("📊 Computing mean and std...")
@@ -114,3 +122,70 @@ def get_dataset_info(dataset):
     num_classes = len(dataset.classes)
     print(f"✅ Input shape: {input_shape}, Number of classes: {num_classes}")
     return input_shape, num_classes
+
+# ------------------------------------------------------------------------------------------------
+# Models comparing
+# ------------------------------------------------------------------------------------------------
+def evaluate_all_models_on_test(models_dir="models", force=False, save_predictions=True):
+    results = {}
+    class_names_path = os.path.join(project_root, "data", "class_names.json")
+    class_names = None
+    if os.path.exists(class_names_path):
+        with open(class_names_path) as f:
+            class_names = json.load(f)
+
+    for model_name in os.listdir(models_dir):
+        print("-"*60)
+        print(f"Evaluating {model_name}...")
+        print("-"*60)        
+        model_path = os.path.join(models_dir, model_name)
+        if not os.path.isdir(model_path):
+            continue
+
+        test_result_path = os.path.join(model_path, f"{model_name}_test.json")
+        config_path = os.path.join(model_path, f"{model_name}_config.json")
+        model_file = os.path.join(model_path, f"{model_name}_best_model.pth")
+
+        if not os.path.exists(config_path) or not os.path.exists(model_file):
+            continue
+
+        if not force and os.path.exists(test_result_path):
+            with open(test_result_path, "r") as f:
+                results[model_name] = json.load(f)
+            print(f"✅ Test results already exist for {model_name}.. loading from {test_result_path}")
+            continue
+
+        model = CIFAR10Classifier.load_model(
+            model_name=model_name,
+            config_path=config_path,
+            model_path=model_file
+        )
+
+        # prepare test loader
+        mean, std = torch.tensor(model.mean), torch.tensor(model.std)
+        test_transform = get_transforms(mean, std)
+        data_dir = os.path.join(project_root, "data")
+        _, test_dataset = load_cifar10_datasets(data_dir=data_dir, transform=test_transform, subset="test")
+        _, _, test_loader = create_loaders(
+            test_dataset=test_dataset,
+            batch_size=config.BATCH_SIZE,
+            num_workers=1
+        )
+        class_names = test_dataset.classes        
+        with open(class_names_path, "w") as f:
+            json.dump(class_names, f)        
+
+        metrics = model.evaluate(test_loader, verbose=False)
+
+        # optionally drop large arrays if we don’t need them cached
+        if not save_predictions:
+            metrics.pop("y_pred", None)
+            metrics.pop("y_true", None)
+
+        with open(test_result_path, "w") as f:
+            json.dump(metrics, f, indent=4)
+            print(f"✅ Test metrics saved to {test_result_path}")
+
+        results[model_name] = metrics
+
+    return results, class_names

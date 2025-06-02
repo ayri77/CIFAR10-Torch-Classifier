@@ -20,7 +20,7 @@ from PIL import Image
 
 import inspect
 
-from utils import show_random_samples, show_class_distribution, plot_training_history
+from utils import show_random_samples, show_class_distribution, plot_training_history, plot_confusion_matrix
 
 class CIFAR10Classifier:
     def __init__(
@@ -293,8 +293,8 @@ class CIFAR10Classifier:
                 _, predicted = torch.max(outputs, 1)
                 correct += (predicted == y_batch).sum().item()
                 total += y_batch.size(0)
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(y_batch.cpu().numpy())                
+                all_preds.extend(predicted.cpu().tolist())
+                all_labels.extend(y_batch.cpu().tolist())                
 
         accuracy = correct / total
         avg_loss = total_loss / len(data_loader)
@@ -445,23 +445,19 @@ class CIFAR10Classifier:
         # load the metrics
         # metrics_path: path to load the metrics
         metrics = self.load_metrics(metrics_path)
-        plot_training_history(metrics, save_path=os.path.join("models", self.name, f"{self.name}_metrics.png"))
+        save_path = os.path.join(os.path.dirname(metrics_path), f"{self.name}_metrics.png")
+        plot_training_history(metrics, save_path=save_path)
 
     def plot_confusion_matrix(self, y_pred_classes, y_true, class_names=None, normalize=False):
-        from sklearn.metrics import confusion_matrix
-        import seaborn as sns
-        import matplotlib.pyplot as plt
+        # for compatibility with the utils.visualization.plot_confusion_matrix
+        # plot the confusion matrix
+        # y_pred_classes: predicted classes
+        # y_true: true classes
+        # class_names: list of class names
+        # normalize: normalize the confusion matrix
+        plot_confusion_matrix(y_pred_classes, y_true, class_names=class_names, normalize=normalize)
 
-        cm = confusion_matrix(y_true, y_pred_classes, normalize='true' if normalize else None)
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt=".2f" if normalize else "d",
-                    cmap="Blues", cbar=False,
-                    xticklabels=class_names, yticklabels=class_names)
-        plt.xlabel("Predicted")
-        plt.ylabel("True")
-        plt.title("Confusion Matrix")
-        plt.show()
-   
+ 
     def show_misclassified(self, data_loader, class_names=None, max_images=10):
         self.model.eval()
         images = []

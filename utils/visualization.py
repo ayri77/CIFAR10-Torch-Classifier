@@ -1,7 +1,13 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import random
 import torchvision
+import os
+import json
+
+import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+import pandas as pd
 
 from collections import Counter
 
@@ -67,6 +73,18 @@ def show_class_distribution(dataset, class_names):
     plt.tight_layout()
     plt.show()
 
+def plot_confusion_matrix(y_pred_classes, y_true, class_names=None, normalize=False):
+
+    cm = confusion_matrix(y_true, y_pred_classes, normalize='true' if normalize else None)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt=".2f" if normalize else "d",
+                cmap="Blues", cbar=False,
+                xticklabels=class_names, yticklabels=class_names)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix")
+    plt.show()
+
 def plot_training_history(history, save_path=None):
     """
     Plots training and validation loss and accuracy from history list.
@@ -107,3 +125,136 @@ def plot_training_history(history, save_path=None):
         print(f"📊 Training plot saved to {save_path}")
     else:
         plt.show()
+
+# ------------------------------------------------------------------------------------------------
+# Models comparing
+# ------------------------------------------------------------------------------------------------
+
+def build_comparison_table(models_dir="models"):
+    rows = []
+
+    for model_name in os.listdir(models_dir):
+        model_path = os.path.join(models_dir, model_name)
+        if not os.path.isdir(model_path):
+            continue
+
+        metrics_file = os.path.join(model_path, f"{model_name}_metrics.json")
+        config_file = os.path.join(model_path, f"{model_name}_config.json")
+
+        if not os.path.exists(metrics_file) or not os.path.exists(config_file):
+            continue
+
+        with open(metrics_file, "r") as f:
+            metrics = json.load(f)
+
+        with open(config_file, "r") as f:
+            config = json.load(f)
+
+        best_epoch = max(metrics, key=lambda e: e["val_accuracy"])
+        last_epochs = metrics[-5:]
+
+        # Determine model type
+        if "conv_layers" in config:
+            model_type = "CNN"
+            layer_summary = f"conv: {len(config['conv_layers'])}, fc: {len(config['fc_layers'])}"
+        else:
+            model_type = "FC"
+            layer_summary = f"fc: {len(config['hidden_layers'])}"
+
+        overfitting_gap = round(best_epoch["train_accuracy"] - best_epoch["val_accuracy"], 4)
+        val_stability = np.std([e["val_accuracy"] for e in last_epochs])
+        avg_epoch_time = round(np.mean([e["epoch_time"] for e in metrics]), 2)
+
+        # Estimate convergence epoch: first epoch reaching 90% of best val acc
+        threshold = 0.9 * best_epoch["val_accuracy"]
+        epochs_to_threshold = next((e["epoch"] for e in metrics if e["val_accuracy"] >= threshold), None)
+
+        rows.append({
+            "Model": model_name,
+            "Type": model_type,
+            "Architecture": layer_summary,
+            "Epoch (best)": best_epoch["epoch"],
+            "Train Acc": round(best_epoch["train_accuracy"], 4),
+            "Val Acc": round(best_epoch["val_accuracy"], 4),
+            "Overfit Gap": overfitting_gap,
+            "Val Loss": round(best_epoch["val_loss"], 4),
+            "Avg Epoch Time (s)": avg_epoch_time,
+            "LR": config.get("optimizer_kwargs", {}).get("lr", None),
+            "Dropout": str(config.get("dropout_rates", "N/A")),
+            "Optimizer": config.get("optimizer", "N/A"),
+            "Converged by Epoch": epochs_to_threshold,
+            "Stability (val acc)": round(val_stability, 4)
+        })
+
+    df = pd.DataFrame(rows)
+    df = df.sort_values("Val Acc", ascending=False).reset_index(drop=True)
+    return df
+
+def plot_model_comparison(df):
+    import matplotlib.pyplot as plt
+    df = df.sort_values("Val Acc", ascending=False)
+    plt.figure(figsize=(10, 5))
+    plt.bar(df["Model"], df["Val Acc"])
+    plt.xticks(rotation=45)
+    plt.ylabel("Validation Accuracy")
+    plt.title("Model Comparison by Validation Accuracy")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_val_vs_test_acc(df):
+    df_sorted = df.sort_values("Val Acc", ascending=False)
+    plt.figure(figsize=(10, 5))
+    x = range(len(df_sorted))
+
+    plt.bar(x, df_sorted["Val Acc"], label="Val Acc", alpha=0.7)
+    plt.bar(x, df_sorted["Test Acc"], label="Test Acc", alpha=0.7)
+    plt.xticks(x, df_sorted["Model"], rotation=45)
+    plt.ylabel("Accuracy")
+    plt.title("Validation vs Test Accuracy")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_dropout_vs_overfit(df):
+    plt.figure(figsize=(8, 5))
+    plt.scatter(df["Dropout Avg"], df["Overfit Gap"], s=100, alpha=0.7)
+    for i, row in df.iterrows():
+        plt.text(row["Dropout Avg"] + 0.005, row["Overfit Gap"], row["Model"], fontsize=8)
+    plt.xlabel("Average Dropout")
+    plt.ylabel("Overfitting Gap (Train Acc - Val Acc)")
+    plt.title("Dropout Rate vs Overfitting Gap")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_efficiency(df):
+    df_sorted = df.sort_values("Efficiency", ascending=False)
+    plt.figure(figsize=(10, 5))
+    plt.bar(df_sorted["Model"], df_sorted["Efficiency"], color="mediumseagreen")
+    plt.xticks(rotation=45)
+    plt.ylabel("Val Acc / Epoch Time")
+    plt.title("Model Efficiency (Accuracy per Second)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_group_accuracy(df):
+    melted = df.melt(
+        id_vars=["Model", "Type"],
+        value_vars=["Val Acc", "Test Acc"],
+        var_name="Metric",
+        value_name="Accuracy"
+    )
+
+    plt.figure(figsize=(8, 5))
+    sns.boxplot(data=melted, x="Type", y="Accuracy", hue="Metric")
+    plt.title("Model Accuracy Distribution by Architecture Type")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def print_per_class_accuracy(y_true, y_pred, class_names=None):
+    report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
+    print(report)

@@ -1,3 +1,5 @@
+from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR
+
 import numpy as np
 import random
 import torchvision
@@ -11,36 +13,48 @@ import pandas as pd
 
 from collections import Counter
 
-def show_random_samples(dataset, class_names, n=10):
+def show_random_samples(dataset_raw, dataset_aug, class_names, n=10):
     """
     Show n random images from the dataset with their labels.
 
     Args:
-        dataset (torch.utils.data.Dataset): CIFAR10 dataset
+        dataset_raw (torch.utils.data.Dataset): CIFAR10 dataset (raw)
+        dataset_aug (torch.utils.data.Dataset): CIFAR10 dataset (augmented)
         class_names (list): List of class names
         n (int): Number of images
     """
-    indices = random.sample(range(len(dataset)), n)
-    images_labels = [dataset[i] for i in indices]
-    
-    plt.figure(figsize=(15, 2))
-    for i, (image, label) in enumerate(images_labels):
-        image_np = image.permute(1, 2, 0).numpy()
-        mean = np.array([0.0, 0.0, 0.0])
-        std = np.array([1.0, 1.0, 1.0])
-        if hasattr(dataset, 'transform') and dataset.transform is not None:
-            # If there is a Normalize, try to reverse it
-            for t in dataset.transform.transforms:
-                if isinstance(t, torchvision.transforms.Normalize):
-                    mean = np.array(t.mean)
-                    std = np.array(t.std)
-        image_np = std * image_np + mean  # de-normalization
-        image_np = np.clip(image_np, 0, 1)
+    indices = random.sample(range(len(dataset_raw)), n)
 
-        plt.subplot(1, n, i + 1)
-        plt.imshow(image_np)
-        plt.title(class_names[label])
-        plt.axis('off')
+    plt.figure(figsize=(n * 2, 4))
+
+    for i, idx in enumerate(indices):
+        # Original image
+        image_raw, label = dataset_raw[idx]
+        plt.subplot(2, n, i + 1)
+        img_raw_np = image_raw.permute(1, 2, 0).numpy()
+        img_raw_np = (img_raw_np - img_raw_np.min()) / (img_raw_np.max() - img_raw_np.min())
+        plt.imshow(img_raw_np)
+        title = f"{class_names[label]}" if class_names else f"Class {label}"
+        plt.title(f"Orig: {title}", fontsize=8)
+        plt.axis("off")
+
+        plt.subplot(2, n, n + i + 1)
+        # Augmented image
+        image_aug, _ = dataset_aug[idx]        
+        # Convert tensor to numpy image
+        img_aug_np = image_aug.numpy()
+        # Check for grayscale image
+        if img_aug_np.shape[0] == 1:
+            img_aug_np = img_aug_np.squeeze(0)  # shape: [H, W]
+            plt.imshow(img_aug_np, cmap='gray')
+        else:
+            img_aug_np = np.transpose(img_aug_np, (1, 2, 0))  # shape: [H, W, C]
+            img_aug_np = (img_aug_np - img_aug_np.min()) / (img_aug_np.max() - img_aug_np.min())
+            plt.imshow(img_aug_np)
+        
+        plt.title(f"Augm: {title}", fontsize=8)
+        plt.axis("off")
+
     plt.tight_layout()
     plt.show()
 
@@ -73,7 +87,7 @@ def show_class_distribution(dataset, class_names):
     plt.tight_layout()
     plt.show()
 
-def plot_confusion_matrix(y_pred_classes, y_true, class_names=None, normalize=False):
+def plot_confusion_matrix(y_pred_classes, y_true, class_names=None, normalize=False, model_name=None):
 
     cm = confusion_matrix(y_true, y_pred_classes, normalize='true' if normalize else None)
     plt.figure(figsize=(8, 6))
@@ -82,7 +96,7 @@ def plot_confusion_matrix(y_pred_classes, y_true, class_names=None, normalize=Fa
                 xticklabels=class_names, yticklabels=class_names)
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title("Confusion Matrix")
+    plt.title(f"Confusion Matrix for {model_name}")
     plt.show()
 
 def plot_training_history(history, save_path=None):
@@ -130,7 +144,7 @@ def plot_training_history(history, save_path=None):
 # Models comparing
 # ------------------------------------------------------------------------------------------------
 
-def build_comparison_table(models_dir="models"):
+def build_comparison_table(models_dir=MODELS_DIR):
     rows = []
 
     for model_name in os.listdir(models_dir):

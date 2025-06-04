@@ -1,3 +1,5 @@
+from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR
+
 import torch
 import numpy as np
 import random
@@ -8,38 +10,116 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 import config
 
-from cifar10_classifier import CIFAR10Classifier
+# ------------------------------------------------------------------------------------------------
+# Custom transformations
+# ------------------------------------------------------------------------------------------------
+class Cutout(object):
+    def __init__(self, size=8):
+        self.size = size
 
-project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
-sys.path.append(project_root)
+    def __call__(self, img):
+        h, w = img.shape[1:]
+        y = np.random.randint(h)
+        x = np.random.randint(w)
 
+        y1 = np.clip(y - self.size // 2, 0, h)
+        y2 = np.clip(y + self.size // 2, 0, h)
+        x1 = np.clip(x - self.size // 2, 0, w)
+        x2 = np.clip(x + self.size // 2, 0, w)
+
+        img[:, y1:y2, x1:x2] = 0
+        return img
+
+
+
+# ------------------------------------------------------------------------------------------------
+# Transformations
+# ------------------------------------------------------------------------------------------------
 def compute_mean_std(dataset, batch_size=512):
     print("📊 Computing mean and std...")
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-    sum_ = torch.zeros(3)
-    squared_sum = torch.zeros(3)
-    num_batches = 0
+
+    # Get the number of channels from the first image
+    sample, _ = next(iter(loader))
+    num_channels = sample.size(1)
+
+    sum_ = torch.zeros(num_channels)
+    squared_sum = torch.zeros(num_channels)
+    num_pixels = 0
+
     for data, _ in loader:
         sum_ += data.sum(dim=[0, 2, 3])
         squared_sum += (data ** 2).sum(dim=[0, 2, 3])
-        num_batches += data.size(0) * data.size(2) * data.size(3)
-    mean = sum_ / num_batches
-    std = (squared_sum / num_batches - mean ** 2).sqrt()
+        num_pixels += data.size(0) * data.size(2) * data.size(3)
+
+    mean = sum_ / num_pixels
+    std = (squared_sum / num_pixels - mean ** 2).sqrt()
     print(f"✅ Mean: {mean.tolist()}, Std: {std.tolist()}")
     return mean, std
 
+def get_transforms(mean, std, augmentation=None, grayscale=False):
+    '''
+    Create a transform pipeline for the CIFAR-10 dataset.
 
-def get_transforms(mean, std):
-    print("🧪 Creating normalization transform...")
-    return transforms.Compose([
-        transforms.Resize((32, 32)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean.tolist(), std.tolist())
-    ])
+    Args:
+        mean (torch.Tensor): The mean of the dataset.
+        std (torch.Tensor): The standard deviation of the dataset.
+        augmentation (dict): The augmentation parameters.
+            "augmentation": {
+            "mode": "cutout",      # or "basic","both"
+            "cutout_size": 8,
+            "mixup_alpha": 0.4
+            }        
+        grayscale (bool): Whether to convert the image to grayscale.
+    '''
+    print("🧪 Creating transform pipeline...")
 
+    transform_list = []
 
-def load_cifar10_datasets(data_dir="./data", transform=None, subset="full"):
-    print(f"📥 Downloading/loading CIFAR-10 datasets... Loading {subset} dataset")
+    if grayscale:
+        transform_list.append(transforms.Grayscale(num_output_channels=1))
+
+    augmentation_mode = None
+    cutout_size = 8
+
+    if isinstance(augmentation, dict):
+        augmentation_mode = augmentation.get("mode", "basic")
+        cutout_size = augmentation.get("cutout_size", 8)
+    elif isinstance(augmentation, str):
+        augmentation_mode = augmentation
+    elif isinstance(augmentation, bool):
+        augmentation_mode = "basic" if augmentation else None
+
+    # First: image-level transforms (PIL-based)
+    if augmentation_mode in ["basic", "cutout", "both"]:
+        transform_list.extend([
+            transforms.RandomCrop(32, padding=4),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.RandomAffine(0, translate=(0.1, 0.1))
+        ])
+
+    # Then: resize + tensor-level
+    transform_list.append(transforms.Resize((32, 32)))
+    transform_list.append(transforms.ToTensor())
+
+    if augmentation_mode in ["cutout", "both"]:
+        transform_list.append(Cutout(size=cutout_size))
+
+    transform_list.append(transforms.Normalize(mean.tolist(), std.tolist()))
+
+    print("🧪 Transform pipeline:")
+    for t in transform_list:
+        print("  └─", t)
+
+    return transforms.Compose(transform_list)
+
+# ------------------------------------------------------------------------------------------------
+# Data loading
+# ------------------------------------------------------------------------------------------------
+def load_cifar10_datasets(data_dir=DATA_DIR, transform=None, subset="full"):
+    print(f"📥 Downloading/loading CIFAR-10 datasets to {data_dir}... Loading {subset} dataset")
     if subset == "full":
         train_dataset = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
         test_dataset = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
@@ -126,9 +206,12 @@ def get_dataset_info(dataset):
 # ------------------------------------------------------------------------------------------------
 # Models comparing
 # ------------------------------------------------------------------------------------------------
-def evaluate_all_models_on_test(models_dir="models", force=False, save_predictions=True):
+def evaluate_all_models_on_test(models_dir=MODELS_DIR, force=False, save_predictions=True):
+
+    from core.cifar10_classifier import CIFAR10Classifier
+
     results = {}
-    class_names_path = os.path.join(project_root, "data", "class_names.json")
+    class_names_path = os.path.join(DATA_DIR, "class_names.json")
     class_names = None
     if os.path.exists(class_names_path):
         with open(class_names_path) as f:
@@ -163,9 +246,9 @@ def evaluate_all_models_on_test(models_dir="models", force=False, save_predictio
 
         # prepare test loader
         mean, std = torch.tensor(model.mean), torch.tensor(model.std)
-        test_transform = get_transforms(mean, std)
-        data_dir = os.path.join(project_root, "data")
-        _, test_dataset = load_cifar10_datasets(data_dir=data_dir, transform=test_transform, subset="test")
+        test_transform = get_transforms(mean, std, augmentation=False, grayscale=model.grayscale)
+        
+        _, test_dataset = load_cifar10_datasets(data_dir=DATA_DIR, transform=test_transform, subset="test")
         _, _, test_loader = create_loaders(
             test_dataset=test_dataset,
             batch_size=config.BATCH_SIZE,
@@ -189,3 +272,20 @@ def evaluate_all_models_on_test(models_dir="models", force=False, save_predictio
         results[model_name] = metrics
 
     return results, class_names
+
+# ------------------------------------------------------------------------------------------------
+# Mixup
+# ------------------------------------------------------------------------------------------------
+def mixup_data(x, y, alpha=1.0, device="cuda"):
+    if alpha > 0.:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1.
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size).to(device)
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
+
+def mixup_criterion(criterion, pred, y_a, y_b, lam):
+    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)

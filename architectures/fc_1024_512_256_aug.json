@@ -1,0 +1,20 @@
+{
+    "model_type": "CIFAR10_FC",
+    "hidden_layers": [1024, 512, 256],
+    "dropout_rates": [0.3, 0.3, 0.3],
+    "activation_fn": "ReLU",
+    "optimizer": {
+      "name": "SGD",
+      "kwargs": {
+        "lr": 0.01,
+        "momentum": 0.9
+      }
+    },
+    "criterion": {
+      "name": "CrossEntropyLoss",
+      "kwargs": {}
+    },
+    "augmentation": true,
+    "grayscale": false  
+}
+  

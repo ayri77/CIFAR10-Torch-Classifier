@@ -1,0 +1,42 @@
+{
+  "model_type": "CIFAR10_CNN",
+  "conv_layers": [
+    {"out_channels": 32, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true},
+    {"out_channels": 64, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true},
+    {"out_channels": 128, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true},
+    {"out_channels": 256, "kernel_size": 3, "stride": 1, "padding": 1, "pool": true}
+  ],
+  "fc_layers": [512, 256],
+  "dropout_rates": [0.5, 0.3],
+  "activation_fn": "ReLU",
+  "optimizer": {
+    "name": "SGD",
+    "kwargs": {
+      "lr": 0.01,
+      "momentum": 0.9,
+      "weight_decay": 1e-4
+    }
+  },
+  "criterion": {
+    "name": "CrossEntropyLoss",
+    "kwargs": {
+      "label_smoothing": 0.1
+    }
+  },
+  "lr_scheduler": {
+    "name": "ReduceLROnPlateau",
+    "kwargs": {
+      "mode": "min",
+      "factor": 0.5,
+      "patience": 3,
+      "threshold": 1e-5,
+      "cooldown": 0,
+      "min_lr": 1e-6,
+      "verbose": true
+    }
+  },
+  "augmentation": true,
+  "grayscale": false,
+  "mixup_enabled": true,
+  "mixup_alpha": 0.4
+}

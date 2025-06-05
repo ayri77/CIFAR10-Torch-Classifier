@@ -1,19 +1,3 @@
-from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR
-
-import argparse
-
-import torch
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-
-from config import BATCH_SIZE
-from core.cifar10_classifier import CIFAR10Classifier
-from utils.data_utils import (
-    get_transforms,
-    load_cifar10_datasets,
-    create_loaders,
-)
 """
 evaluate.py — Evaluate a trained CIFAR-10 model using saved config and weights.
 
@@ -37,11 +21,37 @@ Notes:
 - Also plots training history if metrics file is found.
 """
 
+# Built-in
+import os
+import argparse
+from IPython.display import display
+
+# Third-party
+import torch
+
+# Environment variables
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
+# Local
+from utils.paths import MODELS_DIR
+from config import BATCH_SIZE
+from core.cifar10_classifier import CIFAR10Classifier
+from utils.data_utils import (
+    get_transforms,
+    load_cifar10_datasets,
+    create_loaders,
+)
+
 def main():
+    '''
+    Main function.
+    '''
     parser = argparse.ArgumentParser(description="Evaluate saved CIFAR-10 model")
     parser.add_argument("--model_name", type=str, required=True, help="Name of the model to evaluate")
-    args = parser.parse_args()
+    args = parser.parse_args()    
 
+    # Load model config and weights
     config_path = os.path.join(MODELS_DIR, args.model_name,  f"{args.model_name}_config.json")
     model_path = os.path.join(MODELS_DIR, args.model_name,  f"{args.model_name}_best_model.pth")    
 
@@ -51,9 +61,9 @@ def main():
         model_path=model_path
     )
 
-    model.summary()
+    display(model.summary())
     metrics_path = os.path.join(MODELS_DIR, args.model_name, f"{args.model_name}_metrics.json")
-    model.plot_training_history(metrics_path)
+    display(model.plot_training_history(metrics_path))
 
     mean, std = torch.tensor(model.mean), torch.tensor(model.std)
     # Apply transformations
@@ -63,7 +73,8 @@ def main():
     _, test_dataset = load_cifar10_datasets(transform=full_transform, subset="test")
 
     # Loaders
-    _, _, test_loader = create_loaders(_, _, test_dataset, batch_size=BATCH_SIZE)    
+    dummy_train_dataset, dummy_val_dataset = None, None
+    _, _, test_loader = create_loaders(dummy_train_dataset, dummy_val_dataset, test_dataset, batch_size=BATCH_SIZE)    
 
     # Run evaluation
     metrics = model.evaluate(test_loader,verbose=False)

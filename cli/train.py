@@ -1,28 +1,3 @@
-import sys
-import os
-# Add project root to sys.path
-project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
-if project_root not in sys.path:
-    sys.path.append(project_root)
-
-from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR
-
-import argparse
-import torch
-from torchvision import transforms
-
-from utils.utils import load_architecture
-from config import MEAN, STD, NUM_CLASSES, SPLIT_RATIO, NUM_WORKERS, PATIENCE, NUM_EPOCHS, BATCH_SIZE
-from core.cifar10_classifier import CIFAR10Classifier
-from utils.data_utils import (
-    compute_mean_std, get_transforms,
-    load_cifar10_datasets, split_train_val,
-    create_loaders, get_dataset_info
-)
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-
 """
 train.py — Train CIFAR-10 model using CLI parameters.
 
@@ -57,10 +32,49 @@ Arguments:
 --mixup_alpha      Mixup alpha (overrides config)
 """
 
+# Built-in
+import sys
+import os
+
+# Add project root to sys.path
+project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+import argparse
+import torch
+from torchvision import transforms
+
+from utils.utils import load_architecture
+from config import MEAN, STD, NUM_CLASSES, SPLIT_RATIO, NUM_WORKERS, PATIENCE, NUM_EPOCHS, BATCH_SIZE
+from core.cifar10_classifier import CIFAR10Classifier
+from utils.data_utils import (
+    compute_mean_std, get_transforms,
+    load_cifar10_datasets, split_train_val,
+    create_loaders, get_dataset_info
+)
+
+# Environment variables
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
 def override(cli_val, json_val):
+    '''
+    Override the value from the JSON file with the value from the CLI.
+    Args:
+        cli_val (any): The value from the CLI.
+        json_val (any): The value from the JSON file.
+    Returns:
+        any: The overridden value.
+    '''
     return cli_val if cli_val is not None else json_val
 
 def parse_args():
+    '''
+    Parse the arguments from the CLI.
+    Returns:
+        argparse.Namespace: The parsed arguments.
+    '''
     parser = argparse.ArgumentParser(description="Train CIFAR-10 model via CLI")
 
     parser.add_argument('--config', type=str, help="Path to architecture config (.json)")
@@ -83,6 +97,9 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    '''
+    Main function.
+    '''
     args = parse_args()    
 
     # Step 0: Load architecture and model class
@@ -107,8 +124,9 @@ def main():
     mean, std = compute_mean_std(raw_dataset)
 
     # Step 4: Build model
+    name=os.path.splitext(os.path.basename(args.config))[0]
     model_cls = CIFAR10Classifier(
-        name=args.config.split("/")[-1].replace(".json", ""),
+        name=name,
         model_class=model_class,
         model_kwargs=model_kwargs,
         input_shape=input_shape,
@@ -154,8 +172,10 @@ def main():
         val_loader,
         num_epochs=args.epochs,
         patience=args.patience,
-        log_tensorboard=False
+        log_tensorboard=args.log_tensorboard
     )
+
+    print(f"\n✅ Training completed for model: {model_cls.name}")
 
 if __name__ == "__main__":
     main()

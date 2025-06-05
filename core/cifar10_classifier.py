@@ -1,3 +1,13 @@
+"""
+CIFAR-10 Classifier Implementation
+
+This module provides a comprehensive classifier implementation for the CIFAR-10 dataset.
+It includes functionality for model building, training, evaluation, and prediction.
+
+The classifier supports both fully connected and convolutional neural network architectures,
+with configurable training parameters, data augmentation, and model saving/loading capabilities.
+"""
+
 import sys
 import os
 # Add project root to sys.path
@@ -23,15 +33,43 @@ from torchinfo import summary
 from torch.utils.tensorboard import SummaryWriter
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 import time
 import json
 from pathlib import Path
 from PIL import Image
+from pprint import pformat
 
 import inspect
 
 class CIFAR10Classifier:
+    """
+    A comprehensive classifier implementation for CIFAR-10 dataset.
+    
+    This class provides a complete pipeline for training, evaluating, and using
+    neural network models on the CIFAR-10 dataset. It supports both FC and CNN
+    architectures with configurable parameters and training options.
+    
+    Args:
+        name (str): Unique identifier for the model
+        input_shape (tuple): Input shape (channels, height, width)
+        num_classes (int): Number of output classes
+        activation_fn_name (str): Name of activation function to use
+        model_class (nn.Module, optional): Custom model class to use
+        model_kwargs (dict, optional): Additional arguments for model initialization
+        device (torch.device, optional): Device to use for training
+        optimizer_name (str): Name of optimizer to use
+        optimizer_kwargs (dict): Arguments for optimizer initialization
+        criterion_name (str): Name of loss function to use
+        criterion_kwargs (dict): Arguments for criterion initialization
+        lr_scheduler_name (str): Name of learning rate scheduler to use
+        lr_scheduler_kwargs (dict): Arguments for learning rate scheduler
+        mean (tuple): Mean values for input normalization
+        std (tuple): Standard deviation values for input normalization
+        augmentation (dict/str/bool): Data augmentation configuration
+        grayscale (bool): Whether to convert inputs to grayscale
+    """
     def __init__(
             self, 
             name: str, 
@@ -87,6 +125,12 @@ class CIFAR10Classifier:
         
 
     def build_model(self):
+        """
+        Builds the neural network model based on the specified configuration.
+        
+        This method initializes the model architecture with the configured parameters
+        and moves it to the specified device (CPU/GPU).
+        """
         # Base kwargs, shared
         base_kwargs = {
             "input_size": reduce(operator.mul, self.input_shape),
@@ -108,6 +152,12 @@ class CIFAR10Classifier:
 
 
     def compile(self):
+        """
+        Compiles the model by initializing the optimizer, loss function, and learning rate scheduler.
+        
+        This method sets up all the components needed for training the model.
+        Raises ValueError if unsupported optimizer, criterion, or scheduler is specified.
+        """
         if self.optimizer_name == "Adam":
             self.optimizer = Adam(self.model.parameters(), **self.optimizer_kwargs)
         elif self.optimizer_name == "SGD":
@@ -137,6 +187,21 @@ class CIFAR10Classifier:
             verbose: bool = True,
             log_tensorboard: bool = config.LOG_TENSORBOARD
         ):
+        """
+        Trains the model on the provided data loaders.
+        
+        Args:
+            train_loader: DataLoader for training data
+            val_loader: DataLoader for validation data
+            num_epochs (int): Number of training epochs
+            early_stopping (bool): Whether to use early stopping
+            patience (int): Number of epochs to wait for improvement before stopping
+            verbose (bool): Whether to print training progress
+            log_tensorboard (bool): Whether to log metrics to TensorBoard
+            
+        Returns:
+            dict: Training history containing metrics for each epoch
+        """
         # create the models directory if it doesn't exist
         models_dir = os.path.join(MODELS_DIR, self.name)        
         os.makedirs(models_dir, exist_ok=True)
@@ -144,29 +209,36 @@ class CIFAR10Classifier:
         if log_tensorboard:           
             writer = SummaryWriter(log_dir=os.path.join(TENSORBOARD_DIR, self.name))
 
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
         print("🚀 Training configuration:")
         print(f"🧱 Architecture:       {type(self.model).__name__}")
         print(f"📦 Model name:        {self.name}")
         print(f"📐 Input shape:       {self.input_shape}")
 
         if isinstance(self.model, CIFAR10_CNN):
-            print(f"🔷 Conv layers:        {self.model_kwargs.get('conv_layers')}")
+            print("🔷 Conv layers:")
+            print(pformat(self.model_kwargs.get("conv_layers"), indent=4, width=80))
             print(f"🔢 FC layers:          {self.model_kwargs.get('fc_layers')}")
             print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
         elif isinstance(self.model, CIFAR10_FC):
             print(f"🔢 Hidden layers:      {self.model_kwargs.get('hidden_layers')}")
             print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
 
-
         print(f"⚙️ Activation:        {self.activation_fn_name}")
-        print(f"📈 Optimizer:         {self.optimizer_name} {self.optimizer_kwargs}")
-        print(f"🎯 Criterion:         {self.criterion_name} {self.criterion_kwargs}")
-        print(f"🎯 Lr scheduler:      {self.lr_scheduler_name} {self.lr_scheduler_kwargs}")
+        print(f"📈 Optimizer:         {self.optimizer_name}")
+        print("   " + pformat(self.optimizer_kwargs, indent=4, width=80))
+
+        print(f"🎯 Criterion:         {self.criterion_name}")
+        print("   " + pformat(self.criterion_kwargs, indent=4, width=80))
+
+        print(f"🎯 Lr scheduler:      {self.lr_scheduler_name}")
+        print("   " + pformat(self.lr_scheduler_kwargs, indent=4, width=80))
+
         print(f"🧠 Device:            {self.device}")
         print(f"📊 Epochs:            {num_epochs}")
         print(f"🪄 Early stopping:    {early_stopping} (patience={patience})")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")        
 
         overall_start_time = time.time()
         best_accuracy = 0
@@ -217,6 +289,7 @@ class CIFAR10Classifier:
                     _, predicted = torch.max(outputs, 1)
                     total += y_batch.size(0)
                     correct += (predicted == y_batch).sum().item()
+            current_lr = self.optimizer.param_groups[0]["lr"]
             if self.lr_scheduler:
                 if self.lr_scheduler_name == "StepLR":
                     self.lr_scheduler.step()
@@ -224,7 +297,6 @@ class CIFAR10Classifier:
                     self.lr_scheduler.step(val_loss / len(val_loader))
                     # Log current learning rate
                     if verbose:
-                        current_lr = self.optimizer.param_groups[0]["lr"]
                         print(f"Epoch {epoch+1}: Learning Rate = {current_lr:.6f}")
 
             val_accuracy = correct / total
@@ -338,11 +410,22 @@ class CIFAR10Classifier:
         print("="*60)        
 
     def evaluate(self, data_loader, verbose=True):
+        """
+        Evaluates the model on the provided data loader.
+        
+        Args:
+            data_loader: DataLoader for evaluation data
+            verbose (bool): Whether to print evaluation results
+            
+        Returns:
+            tuple: (loss, accuracy) on the evaluation data
+        """
         self.model.eval()
         total_loss = 0
         correct = 0
         total = 0
         all_preds = []
+        all_probs = []
         all_labels = []        
 
         with torch.no_grad():
@@ -358,6 +441,7 @@ class CIFAR10Classifier:
                 correct += (predicted == y_batch).sum().item()
                 total += y_batch.size(0)
                 all_preds.extend(predicted.cpu().tolist())
+                all_probs.extend(torch.softmax(outputs, dim=1).cpu().tolist())
                 all_labels.extend(y_batch.cpu().tolist())                
 
         accuracy = correct / total
@@ -370,10 +454,17 @@ class CIFAR10Classifier:
             "loss": avg_loss,
             "accuracy": accuracy,
             "y_pred": all_preds,
-            "y_true": all_labels
+            "y_true": all_labels,
+            "probs": all_probs
         }
 
-    def summary(self):        
+    def summary(self):
+        """
+        Prints a summary of the model architecture and parameters.
+        
+        Uses torchinfo to display detailed information about the model structure,
+        number of parameters, and memory usage.
+        """
         if not hasattr(self, "model"):
             print("⚠️ Model is not built yet.")
             return
@@ -384,6 +475,18 @@ class CIFAR10Classifier:
 # Predictions
 # --------------------------------------------------------
     def predict_image(self, path: str, transform, class_names: list, show_image: bool = True):
+        """
+        Predicts the class of a single image.
+        
+        Args:
+            path (str): Path to the image file
+            transform: Transform to apply to the image
+            class_names (list): List of class names
+            show_image (bool): Whether to display the image
+            
+        Returns:
+            str: Predicted class name
+        """
         # predict the image
         # path: path to the image
         # transform: transform to apply to the image
@@ -397,14 +500,32 @@ class CIFAR10Classifier:
             _, predicted = torch.max(output, 1)
             pred_class = class_names[predicted.item()]
 
+            probs = torch.softmax(output, dim=1)[0].cpu().numpy()
+            top3 = np.argsort(probs)[-3:][::-1]
+            lines = [f"{class_names[i]}: {probs[i]:.2f}" for i in top3]            
+
             if show_image:
+                plt.figure(figsize=(4, 4))
                 plt.imshow(image)
-                plt.title(f"Predicted: {pred_class}")
+                plt.title(f"Predicted: {pred_class}\n" + "\n".join(lines))
                 plt.axis("off")
                 plt.show()
             return pred_class
 
     def predict_images(self, directory: str, transform, class_names: list, show_images: bool = True, n_cols: int = 5):
+        """
+        Predicts classes for all images in a directory.
+        
+        Args:
+            directory (str): Path to directory containing images
+            transform: Transform to apply to images
+            class_names (list): List of class names
+            show_images (bool): Whether to display the images
+            n_cols (int): Number of columns in the display grid
+            
+        Returns:
+            list: List of predicted class names
+        """
         # predict the images
         # directory: directory of the images
         # transform: transform to apply to the images
@@ -422,15 +543,25 @@ class CIFAR10Classifier:
             plt.figure(figsize=(4 * n_cols, 4 * n_rows))
 
         for i, path in enumerate(image_paths):
-            pred = self.predict_image(path, transform, class_names, show_image=False)
-            predictions.append((path, pred))
+            self.model.eval()
+            with torch.no_grad():
+                image = Image.open(path).convert("RGB")
+                image_tensor = transform(image).unsqueeze(0).to(self.device)
+                output = self.model(image_tensor)
+                probs = torch.softmax(output, dim=1)[0].cpu().numpy()
+                pred_idx = np.argmax(probs)
+                pred_class = class_names[pred_idx]
 
-            if show_images:
-                img = Image.open(path)
-                plt.subplot(n_rows, n_cols, i + 1)
-                plt.imshow(img)
-                plt.axis("off")
-                plt.title(f"Predicted: {pred}")
+                predictions.append((path, pred_class))
+
+                if show_images:
+                    top3 = np.argsort(probs)[-3:][::-1]
+                    lines = [f"{class_names[i]}: {probs[i]:.2f}" for i in top3]
+
+                    plt.subplot(n_rows, n_cols, i + 1)
+                    plt.imshow(image)
+                    plt.title(f"Predicted: {pred_class}\n" + "\n".join(lines), fontsize=10)
+                    plt.axis("off")
 
         if show_images:
             plt.tight_layout()
@@ -443,15 +574,38 @@ class CIFAR10Classifier:
 # --------------------------------------------------------
 
     def save(self, path):
+        """
+        Saves the model and its configuration to disk.
+        
+        Args:
+            path (str): Path to save the model
+        """
         torch.save(self.model.state_dict(), path)
 
     def load(self, path):
+        """
+        Loads a saved model and its configuration from disk.
+        
+        Args:
+            path (str): Path to load the model from
+        """
         checkpoint = torch.load(path, weights_only=False)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.to(self.device)
 
     @classmethod
     def load_model(cls, model_name, config_path, model_path):
+        """
+        Loads a saved model and its configuration.
+        
+        Args:
+            model_name (str): Name of the model
+            config_path (str): Path to the model configuration
+            model_path (str): Path to the saved model weights
+            
+        Returns:
+            CIFAR10Classifier: Loaded classifier instance
+        """
         cfg = cls.load_config(config_path)
 
         if "conv_layers" in cfg and "fc_layers" in cfg:
@@ -493,12 +647,30 @@ class CIFAR10Classifier:
     
     @staticmethod
     def load_config(config_path):
+        """
+        Loads model configuration from a JSON file.
+        
+        Args:
+            config_path (str): Path to the configuration file
+            
+        Returns:
+            dict: Model configuration
+        """
         # load the config
         # config_path: path to load the config
         return json.load(open(config_path))
     
     @staticmethod
     def load_metrics(metrics_path):
+        """
+        Loads training metrics from a JSON file.
+        
+        Args:
+            metrics_path (str): Path to the metrics file
+            
+        Returns:
+            list: Training history metrics
+        """
         # load the metrics
         # metrics_path: path to load the metrics
         return json.load(open(metrics_path))
@@ -508,6 +680,12 @@ class CIFAR10Classifier:
 # --------------------------------------------------------
 
     def plot_training_history(self, metrics_path):
+        """
+        Plots the training history using the loaded metrics.
+        
+        Args:
+            metrics_path (str): Path to the metrics file
+        """
         # load the metrics
         # metrics_path: path to load the metrics
         metrics = self.load_metrics(metrics_path)
@@ -515,6 +693,15 @@ class CIFAR10Classifier:
         plot_training_history(metrics, save_path=save_path)
 
     def plot_confusion_matrix(self, y_pred_classes, y_true, class_names=None, normalize=False):
+        """
+        Plots the confusion matrix for model predictions.
+        
+        Args:
+            y_pred_classes: Predicted class labels
+            y_true: True class labels
+            class_names (list, optional): List of class names
+            normalize (bool): Whether to normalize the confusion matrix
+        """
         # for compatibility with the utils.visualization.plot_confusion_matrix
         # plot the confusion matrix
         # y_pred_classes: predicted classes
@@ -525,48 +712,75 @@ class CIFAR10Classifier:
 
  
     def show_misclassified(self, data_loader, class_names=None, max_images=10):
+        """
+        Displays examples of misclassified images.
+        
+        Args:
+            data_loader: DataLoader containing the images
+            class_names (list, optional): List of class names
+            max_images (int): Maximum number of misclassified images to show
+        """
         self.model.eval()
         images = []
         predictions = []
+        probs = []
         labels = []
 
         with torch.no_grad():
             for X_batch, y_batch in data_loader:
                 X_batch = X_batch.to(self.device)
                 outputs = self.model(X_batch)
+                batch_probs = torch.softmax(outputs, dim=1).cpu().numpy()
                 _, predicted = torch.max(outputs, 1)
 
-                for img, pred, true in zip(X_batch.cpu(), predicted.cpu(), y_batch):
+                for img, pred, true, prob in zip(X_batch.cpu(), predicted.cpu(), y_batch, batch_probs):
                     if pred != true:
                         images.append(img)
                         predictions.append(pred.item())
                         labels.append(true.item())
+                        probs.append(prob)
                         if len(images) >= max_images:
                             break
                 if len(images) >= max_images:
                     break
 
         # Plotting
-        import matplotlib.pyplot as plt
-
-        plt.figure(figsize=(15, 6))
+        n_cols = (max_images + 1) // 2
+        fig, axes = plt.subplots(2, n_cols, figsize=(n_cols * 6, 10))
+        axes = axes.flatten()        
+        
         for i in range(len(images)):
-            plt.subplot(2, (max_images + 1) // 2, i + 1)
-
             # Augmented image
             img = images[i]
             if img.shape[0] == 1:
                 img = img * torch.tensor(self.std) + torch.tensor(self.mean)
                 img = img.squeeze(0)  # shape: [H, W]
-                plt.imshow(img, cmap='gray')
             else:
                 img = images[i].permute(1, 2, 0)
                 img = img * torch.tensor(self.std) + torch.tensor(self.mean)  # denormalize
                 img = torch.clamp(img, 0, 1)
-                plt.imshow(img)
-            title = f"True: {class_names[labels[i]]}" if class_names else f"True: {labels[i]}"
-            title += f"\nPred: {class_names[predictions[i]]}" if class_names else f", Pred: {predictions[i]}"
-            plt.title(title, fontsize=10)
-            plt.axis("off")
+
+            ax = axes[i]
+            ax.imshow(img, cmap='gray' if img.ndim == 2 else None)
+            ax.axis("off")
+
+            top3 = np.argsort(probs[i])[-3:][::-1]
+            title = f"True: {class_names[labels[i]]}\nPred: {class_names[predictions[i]]}"
+            subtitle = "\n".join([f"{class_names[j]}: {probs[i][j]:.2f}" for j in top3])
+            ax.set_title(title + "\n" + subtitle, fontsize=12)
+
+            # Add inset bar plot
+            inset = ax.inset_axes([0.05, -0.35, 0.9, 0.3])
+            inset.bar(range(len(probs[i])), probs[i], color="lightgray")
+            inset.set_ylim(0, 1)
+            inset.set_xticks(range(len(prob)))
+            inset.set_xticklabels(class_names, rotation=45, ha='right', fontsize=9)
+            inset.set_yticks([0.0, 0.5, 1.0])
+            inset.set_yticklabels(["0", "0.5", "1.0"], fontsize=9)
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        plt.subplots_adjust(wspace=0.5, hspace=2.5)
         plt.tight_layout()
         plt.show()

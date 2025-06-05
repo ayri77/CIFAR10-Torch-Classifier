@@ -778,6 +778,7 @@ class CIFAR10Classifier:
             inset = ax.inset_axes([0.05, -0.35, 0.9, 0.3])
             inset.bar(range(len(probs[i])), probs[i], color="lightgray")
             inset.set_ylim(0, 1)
+            # xtick count should match number of probabilities for this image
             inset.set_xticks(range(len(probs[i])))
             inset.set_xticklabels(class_names, rotation=45, ha='right', fontsize=9)
             inset.set_yticks([0.0, 0.5, 1.0])

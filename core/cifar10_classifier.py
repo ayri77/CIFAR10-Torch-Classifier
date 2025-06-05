@@ -418,7 +418,12 @@ class CIFAR10Classifier:
             verbose (bool): Whether to print evaluation results
             
         Returns:
-            tuple: (loss, accuracy) on the evaluation data
+            dict: Dictionary containing evaluation results with keys:
+                - ``loss`` (float): Average loss over the dataset
+                - ``accuracy`` (float): Accuracy of the model
+                - ``y_pred`` (list): Predicted class labels
+                - ``y_true`` (list): Ground truth class labels
+                - ``probs`` (list): Predicted class probabilities
         """
         self.model.eval()
         total_loss = 0

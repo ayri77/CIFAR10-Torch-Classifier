@@ -1,0 +1,6 @@
+{
+    "model_type": "CIFAR10_DenseNet121",
+    "optimizer": {"name": "Adam", "kwargs": {"lr": 0.001}},
+    "criterion": {"name": "CrossEntropyLoss", "kwargs": {}},
+}
+

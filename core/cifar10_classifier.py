@@ -580,22 +580,32 @@ class CIFAR10Classifier:
 
     def save(self, path):
         """
-        Saves the model and its configuration to disk.
-        
+        Saves model weights to disk.
+
+        The checkpoint uses the same dictionary format produced during
+        training::
+
+            {'model_state_dict': self.model.state_dict()}
+
         Args:
             path (str): Path to save the model
         """
-        torch.save(self.model.state_dict(), path)
+        torch.save({'model_state_dict': self.model.state_dict()}, path)
 
     def load(self, path):
         """
-        Loads a saved model and its configuration from disk.
-        
+        Loads saved model weights from ``path``.
+
         Args:
             path (str): Path to load the model from
         """
-        checkpoint = torch.load(path, weights_only=False)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        checkpoint = torch.load(path, map_location=self.device)
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+        else:
+            # Backwards compatibility with raw state dict files
+            state_dict = checkpoint
+        self.model.load_state_dict(state_dict)
         self.model.to(self.device)
 
     @classmethod

@@ -97,6 +97,20 @@ pip install -r requirements.txt
 - Follow the instructions in the notebook
 - Monitor training progress in TensorBoard
 
+## 💾 Saving & Loading Models
+
+Use the helper methods on `CIFAR10Classifier` to persist models:
+
+```python
+classifier.save("path/to/model.pth")
+loaded = CIFAR10Classifier.load_model(
+    model_name, config_path, "path/to/model.pth"
+)
+```
+
+The `save()` method stores a checkpoint dictionary with a
+`model_state_dict` key, matching the format used during training.
+
 ## 📊 Model Performance
 
 Current best results:

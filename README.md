@@ -60,6 +60,7 @@ CIFAR10-Torch-Classifier/
 ### Training Features
 - Advanced data augmentation (Mixup, Cutout)
 - Learning rate scheduling
+- Multiple optimizer choices (SGD, Adam, AdamW, RMSprop, Adagrad)
 - Early stopping
 - Model checkpointing
 - TensorBoard logging (loss, accuracy, learning rate)

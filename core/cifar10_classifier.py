@@ -26,7 +26,7 @@ from functools import reduce
 
 import torch
 import torch.nn as nn
-from torch.optim import Adam, SGD
+from torch.optim import Adam, AdamW, SGD, RMSprop, Adagrad
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 from torchinfo import summary
@@ -160,6 +160,12 @@ class CIFAR10Classifier:
         """
         if self.optimizer_name == "Adam":
             self.optimizer = Adam(self.model.parameters(), **self.optimizer_kwargs)
+        elif self.optimizer_name == "AdamW":
+            self.optimizer = AdamW(self.model.parameters(), **self.optimizer_kwargs)
+        elif self.optimizer_name == "RMSprop":
+            self.optimizer = RMSprop(self.model.parameters(), **self.optimizer_kwargs)
+        elif self.optimizer_name == "Adagrad":
+            self.optimizer = Adagrad(self.model.parameters(), **self.optimizer_kwargs)
         elif self.optimizer_name == "SGD":
             self.optimizer = SGD(self.model.parameters(), **self.optimizer_kwargs)
         else:

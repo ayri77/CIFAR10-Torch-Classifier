@@ -20,7 +20,7 @@ This document summarizes all configurable options for CIFAR-10 model training us
 
 | Section     | Setting          | Parameters                                                         | Notes                            |
 | ----------- | ---------------- | ------------------------------------------------------------------ | -------------------------------- |
-| `optimizer` | `name`, `kwargs` | `"Adam"`, `"SGD"`, etc. <br> With `kwargs`: `lr`, `momentum`, etc. | Optimizer config                 |
+| `optimizer` | `name`, `kwargs` | `"Adam"`, `"AdamW"`, `"SGD"`, `"RMSprop"`, `"Adagrad"`, etc. <br> With `kwargs`: `lr`, `momentum`, etc. | Optimizer config                 |
 | `criterion` | `name`, `kwargs` | Typically `"CrossEntropyLoss"`                                     | Loss function for classification |
 
 ---

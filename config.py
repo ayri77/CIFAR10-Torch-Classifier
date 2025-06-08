@@ -50,8 +50,8 @@ NUM_EPOCHS = 100
 # Patience for early stopping
 PATIENCE = 10 
 LR = 0.01
-OPTIMIZER = "Adam"  # Alternatives: "SGD"
-OPTIMIZER_KWARGS = {"lr": LR} # SGD: {"lr": LR, "momentum": 0.9}
+OPTIMIZER = "Adam"  # Alternatives: "SGD", "AdamW", "RMSprop", "Adagrad"
+OPTIMIZER_KWARGS = {"lr": LR} # SGD/RMSprop: {"lr": LR, "momentum": 0.9}
 CRITERION = "CrossEntropyLoss"
 CRITERION_KWARGS = {} # {"weight": torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])}
 

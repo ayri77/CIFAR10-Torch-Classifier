@@ -54,6 +54,7 @@ CIFAR10-Torch-Classifier/
 ### Model Architectures
 - Fully-connected network (MLP) with configurable layers
 - Convolutional Neural Network (CNN) with modern architecture
+- ResNet18 and DenseNet121 variants adapted for 32×32 inputs
 - Dropout, BatchNorm, Activation function selection
 - Customizable layer configurations
 

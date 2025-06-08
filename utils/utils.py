@@ -17,15 +17,17 @@ import torch
 import json
 import os
 from core.cifar10_model import CIFAR10_FC, CIFAR10_CNN
+from core.advanced_models import CIFAR10_ResNet18, CIFAR10_DenseNet121
 from config import AUGMENTATION, GRAYSCALE
 
+
 def set_seed(seed=42, verbose=True):
-    '''
+    """
     Set the seed for the random number generators.
     Args:
         seed (int): The seed to set.
         verbose (bool): Whether to print the seed.
-    '''
+    """
     if verbose:
         print(f"🔧 Setting seed: {seed}")
     random.seed(seed)
@@ -36,12 +38,14 @@ def set_seed(seed=42, verbose=True):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+
 def set_deterministic(deterministic: bool = True, benchmark: bool = False):
-    '''
+    """
     Set the deterministic flag for the cuDNN library.
-    '''
+    """
     torch.backends.cudnn.deterministic = deterministic
     torch.backends.cudnn.benchmark = benchmark
+
 
 def load_architecture(arch_name, base_dir=ARCHITECTURES_DIR):
     """
@@ -60,11 +64,13 @@ def load_architecture(arch_name, base_dir=ARCHITECTURES_DIR):
 
     model_class_mapping = {
         "CIFAR10_CNN": CIFAR10_CNN,
-        "CIFAR10_FC": CIFAR10_FC
+        "CIFAR10_FC": CIFAR10_FC,
+        "CIFAR10_ResNet18": CIFAR10_ResNet18,
+        "CIFAR10_DenseNet121": CIFAR10_DenseNet121,
     }
 
     path = os.path.join(base_dir, f"{arch_name}.json")
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         arch_data = json.load(f)
 
     # extract and pop values
@@ -75,16 +81,14 @@ def load_architecture(arch_name, base_dir=ARCHITECTURES_DIR):
     activation_fn_name = arch_data.pop("activation_fn", "ReLU")
 
     # optimizer config
-    optimizer_config = arch_data.pop("optimizer", {
-        "name": "Adam",
-        "kwargs": {"lr": 0.001}
-    })
+    optimizer_config = arch_data.pop(
+        "optimizer", {"name": "Adam", "kwargs": {"lr": 0.001}}
+    )
 
     # criterion config
-    criterion_config = arch_data.pop("criterion", {
-        "name": "CrossEntropyLoss",
-        "kwargs": {}
-    })
+    criterion_config = arch_data.pop(
+        "criterion", {"name": "CrossEntropyLoss", "kwargs": {}}
+    )
 
     # lr_scheduler config
     lr_scheduler_config = arch_data.pop("lr_scheduler", None)
@@ -93,4 +97,13 @@ def load_architecture(arch_name, base_dir=ARCHITECTURES_DIR):
     augmentation = arch_data.pop("augmentation", AUGMENTATION)
     grayscale = arch_data.pop("grayscale", GRAYSCALE)
 
-    return model_class, arch_data, activation_fn_name, optimizer_config, criterion_config, lr_scheduler_config, augmentation, grayscale
+    return (
+        model_class,
+        arch_data,
+        activation_fn_name,
+        optimizer_config,
+        criterion_config,
+        lr_scheduler_config,
+        augmentation,
+        grayscale,
+    )

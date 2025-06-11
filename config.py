@@ -32,6 +32,7 @@ AUGMENTATION = {
     "cutout_size": 8
 }
 GRAYSCALE = False
+RESIZE = (32, 32)
 
 # ------------------------------------------------------------------------------------------------
 # Model
@@ -73,5 +74,5 @@ MODEL_DIR = "models"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_GPUS = torch.cuda.device_count()
 NUM_WORKERS = 1 # os.cpu_count()
-BATCH_SIZE = 256
+BATCH_SIZE = 24
 PIN_MEMORY = True

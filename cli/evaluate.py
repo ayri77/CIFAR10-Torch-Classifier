@@ -54,6 +54,7 @@ def main():
     # Load model config and weights
     config_path = os.path.join(MODELS_DIR, args.model_name,  f"{args.model_name}_config.json")
     model_path = os.path.join(MODELS_DIR, args.model_name,  f"{args.model_name}_best_model.pth")    
+    metrics_path = os.path.join(MODELS_DIR, args.model_name, f"{args.model_name}_metrics.json")
 
     model = CIFAR10Classifier.load_model(
         model_name=args.model_name,
@@ -61,13 +62,12 @@ def main():
         model_path=model_path
     )
 
-    display(model.summary())
-    metrics_path = os.path.join(MODELS_DIR, args.model_name, f"{args.model_name}_metrics.json")
+    display(model.summary())    
     display(model.plot_training_history(metrics_path))
 
     mean, std = torch.tensor(model.mean), torch.tensor(model.std)
     # Apply transformations
-    full_transform = get_transforms(mean, std, augmentation=False, grayscale=model.grayscale)
+    full_transform = get_transforms(mean, std, augmentation=False, grayscale=model.grayscale, resize=model.resize)
 
     # Load with transformations
     _, test_dataset = load_cifar10_datasets(transform=full_transform, subset="test")

@@ -92,7 +92,7 @@ def compute_mean_std(dataset, batch_size=512):
     print(f"✅ Mean: {mean.tolist()}, Std: {std.tolist()}")
     return mean, std
 
-def get_transforms(mean, std, augmentation=None, grayscale=False):
+def get_transforms(mean, std, augmentation=None, grayscale=False, resize=None):
     '''
     Create a transform pipeline for the CIFAR-10 dataset.
     Args:
@@ -105,6 +105,7 @@ def get_transforms(mean, std, augmentation=None, grayscale=False):
             "mixup_alpha": 0.4
             }        
         grayscale (bool): Whether to convert the image to grayscale.
+        resize (tuple): The size to resize the image to.
     '''
     print("🧪 Creating transform pipeline...")
 
@@ -128,14 +129,18 @@ def get_transforms(mean, std, augmentation=None, grayscale=False):
     if augmentation_mode in ["basic", "cutout", "both"]:
         transform_list.extend([
             transforms.RandomCrop(32, padding=4),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.ColorJitter(brightness=0.2, contrast=0.3, saturation=0.6, hue=0.4),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10),
-            transforms.RandomAffine(0, translate=(0.1, 0.1))
+            transforms.RandomAffine(degrees=0, translate=(0.127, 0.127))
         ])
 
     # Then: resize + tensor-level
-    transform_list.append(transforms.Resize((32, 32)))
+    if resize is not None:
+        transform_list.append(transforms.Resize(resize))
+    else:
+        transform_list.append(transforms.Resize(config.RESIZE))
+
     transform_list.append(transforms.ToTensor())
 
     if augmentation_mode in ["cutout", "both"]:
@@ -318,7 +323,7 @@ def evaluate_all_models_on_test(models_dir=MODELS_DIR, force=False, save_predict
 
         # prepare test loader
         mean, std = torch.tensor(model.mean), torch.tensor(model.std)
-        test_transform = get_transforms(mean, std, augmentation=False, grayscale=model.grayscale)
+        test_transform = get_transforms(mean, std, augmentation=False, grayscale=model.grayscale, resize=model.resize)
         
         _, test_dataset = load_cifar10_datasets(data_dir=DATA_DIR, transform=test_transform, subset="test")
         _, _, test_loader = create_loaders(

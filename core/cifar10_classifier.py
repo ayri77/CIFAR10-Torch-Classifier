@@ -18,7 +18,9 @@ from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR, TENSORBOARD_DIR
 from utils.data_utils import mixup_data, mixup_criterion
 from utils.visualization import plot_training_history, plot_confusion_matrix
 
-from core.cifar10_model import CIFAR10_FC, CIFAR10_CNN
+from core.cifar10_models import (
+    CIFAR10_FC, CIFAR10_CNN, CIFAR10_ResNet18, CIFAR10_DenseNet121, CIFAR10_DeepDropoutCNN
+)
 import config
 
 import operator 
@@ -53,11 +55,8 @@ class CIFAR10Classifier:
     
     Args:
         name (str): Unique identifier for the model
-        input_shape (tuple): Input shape (channels, height, width)
-        num_classes (int): Number of output classes
-        activation_fn_name (str): Name of activation function to use
-        model_class (nn.Module, optional): Custom model class to use
-        model_kwargs (dict, optional): Additional arguments for model initialization
+        model_type (str): Type of model to use
+        model_kwargs (dict, optional): arguments for model initialization: architecture, shape, num_classes, activation_fn_name, use_batchnorm etc.
         device (torch.device, optional): Device to use for training
         optimizer_name (str): Name of optimizer to use
         optimizer_kwargs (dict): Arguments for optimizer initialization
@@ -67,16 +66,15 @@ class CIFAR10Classifier:
         lr_scheduler_kwargs (dict): Arguments for learning rate scheduler
         mean (tuple): Mean values for input normalization
         std (tuple): Standard deviation values for input normalization
-        augmentation (dict/str/bool): Data augmentation configuration
+        augmentation (dict): Data augmentation configuration
         grayscale (bool): Whether to convert inputs to grayscale
     """
     def __init__(
             self, 
             name: str, 
-            input_shape=(3, 32, 32), 
-            num_classes=config.NUM_CLASSES, 
-            activation_fn_name = config.ACTIVATION_FN, 
-            model_class=None,
+            input_shape: tuple,
+            num_classes: int,
+            model_type: str,
             model_kwargs=None,            
             device=None,
             optimizer_name=config.OPTIMIZER,
@@ -89,13 +87,13 @@ class CIFAR10Classifier:
             std=config.STD,
             augmentation=config.AUGMENTATION,
             grayscale=config.GRAYSCALE,
+            resize=config.RESIZE
         ):
         
         self.name = name
         self.input_shape = input_shape
         self.num_classes = num_classes
-        self.activation_fn_name = activation_fn_name
-        self.model_class = model_class or CIFAR10_FC
+        self.model_type = model_type
         self.model_kwargs = model_kwargs or {}
 
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -108,21 +106,11 @@ class CIFAR10Classifier:
         self.mean = mean
         self.std = std
         self.augmentation = augmentation
+        self.mixup_enabled = augmentation.get("mode") in ["mixup", "both"]
+        self.mixup_alpha = augmentation.get("mixup_alpha") if self.mixup_enabled else None
+        self.cutout_size = augmentation.get("cutout_size", 0)
         self.grayscale = grayscale
-        if isinstance(augmentation, dict):
-            augmentation_mode = augmentation.get("mode", "basic")
-            cutout_size = augmentation.get("cutout_size", 8)
-        elif isinstance(augmentation, str):
-            augmentation_mode = augmentation
-        elif isinstance(augmentation, bool):
-            augmentation_mode = "basic" if augmentation else None        
-        if augmentation_mode in ["mixup", "both"]:
-            self.mixup_enabled = True
-            self.mixup_alpha = augmentation.get("mixup_alpha", 0.4)
-        else:
-            self.mixup_enabled = False
-            self.mixup_alpha = None
-        
+        self.resize = resize
 
     def build_model(self):
         """
@@ -131,24 +119,43 @@ class CIFAR10Classifier:
         This method initializes the model architecture with the configured parameters
         and moves it to the specified device (CPU/GPU).
         """
-        # Base kwargs, shared
-        base_kwargs = {
-            "input_size": reduce(operator.mul, self.input_shape),
-            "input_shape": self.input_shape,
-            "num_classes": self.num_classes,
-            "activation_fn": getattr(nn, self.activation_fn_name),
-        }
+        if self.model_type == "CIFAR10_FC":
+            model_class = CIFAR10_FC
+        elif self.model_type == "CIFAR10_CNN":
+            model_class = CIFAR10_CNN
+        elif self.model_type == "CIFAR10_ResNet18":
+            model_class = CIFAR10_ResNet18
+        elif self.model_type == "CIFAR10_DenseNet121":
+            model_class = CIFAR10_DenseNet121
+        elif self.model_type == "CIFAR10_DeepDropoutCNN":
+            model_class = CIFAR10_DeepDropoutCNN
+        else:
+            raise ValueError(f"Unsupported model type: {self.model_type}")
 
-        # Merge and filter kwargs based on model_class's signature
-        all_kwargs = {**base_kwargs, **self.model_kwargs}
-        model_signature = inspect.signature(self.model_class.__init__)
+        #activation_fn_name = self.model_kwargs.pop("activation_fn_name", "ReLU")
+        activation_fn_name = self.model_kwargs.get("activation_fn_name", "ReLU")
+        activation_cls = getattr(nn, activation_fn_name)
+        self.model_kwargs["activation_cls"] = activation_cls
+
+        if "input_shape" not in self.model_kwargs:
+            self.model_kwargs["input_shape"] = self.input_shape
+        if "num_classes" not in self.model_kwargs:
+            self.model_kwargs["num_classes"] = self.num_classes
+
+        all_kwargs = self.model_kwargs.copy()
+        if model_class == CIFAR10_FC:
+            all_kwargs["input_size"] = reduce(operator.mul, self.model_kwargs["input_shape"])
+        model_signature = inspect.signature(model_class.__init__)
         valid_keys = model_signature.parameters.keys()
-        filtered_kwargs = {
-            k: v for k, v in all_kwargs.items() if k in valid_keys
-        }
+        #print(f"Debug: Valid keys: {valid_keys}")
+        filtered_kwargs = {k: v for k, v in all_kwargs.items() if k in valid_keys}
+        #print(f"Debug: Filtered kwargs: {filtered_kwargs}")
 
-        self.model = self.model_class(**filtered_kwargs)
-        self.model.to(self.device)     
+        if model_class in [CIFAR10_ResNet18, CIFAR10_DenseNet121]:
+            self.model = model_class(num_classes=self.model_kwargs["num_classes"])
+        else:
+            self.model = model_class(**filtered_kwargs)
+        self.model.to(self.device)
 
 
     def compile(self):
@@ -218,7 +225,7 @@ class CIFAR10Classifier:
 
         print("\n" + "=" * 60)
         print("🚀 Training configuration:")
-        print(f"🧱 Architecture:       {type(self.model).__name__}")
+        print(f"🧱 Architecture:      {self.model_type}")
         print(f"📦 Model name:        {self.name}")
         print(f"📐 Input shape:       {self.input_shape}")
 
@@ -231,7 +238,7 @@ class CIFAR10Classifier:
             print(f"🔢 Hidden layers:      {self.model_kwargs.get('hidden_layers')}")
             print(f"🎛 Dropout rates:      {self.model_kwargs.get('dropout_rates')}")
 
-        print(f"⚙️ Activation:        {self.activation_fn_name}")
+        print(f"⚙️ Activation:        {self.model_kwargs.get('activation_fn_name')}")
         print(f"📈 Optimizer:         {self.optimizer_name}")
         print("   " + pformat(self.optimizer_kwargs, indent=4, width=80))
 
@@ -252,14 +259,17 @@ class CIFAR10Classifier:
         patience_counter = 0 
 
         history = []
+        #print("[DEBUG] 1. Starting epoch loop")
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
 
+            #print("[DEBUG] 2. Starting batch loop")
             self.model.train()
             train_loss = 0
             train_correct = 0
             train_total = 0
             for X_batch, y_batch in train_loader:
+                #print("[DEBUG] 3. Got batch")
                 X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
                 self.optimizer.zero_grad()
                 if self.mixup_enabled:
@@ -371,40 +381,7 @@ class CIFAR10Classifier:
             print(f"Metrics saved to {metrics_path}")
 
         # save the config
-        config_dict = {
-            "model_name": self.name,
-            "input_shape": self.input_shape,
-            "num_classes": self.num_classes,
-            "activation": self.activation_fn_name,
-            "optimizer": self.optimizer_name,
-            "optimizer_kwargs": self.optimizer_kwargs,
-            "criterion": self.criterion_name,
-            "criterion_kwargs": self.criterion_kwargs,
-            "lr_scheduler": self.lr_scheduler_name,
-            "lr_scheduler_kwargs": self.lr_scheduler_kwargs,
-            "device": str(self.device),
-            "num_epochs": num_epochs,
-            "early_stopping": early_stopping,
-            "patience": patience,
-            "mean": self.mean,
-            "std": self.std,
-            "augmentation": self.augmentation,
-            "grayscale": self.grayscale
-        }
-
-        # Detect CNN-style model and store relevant architecture fields
-        if isinstance(self.model, CIFAR10_CNN):
-            config_dict["conv_layers"] = self.model_kwargs.get('conv_layers')
-            config_dict["fc_layers"] = self.model_kwargs.get('fc_layers')
-            config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
-        elif isinstance(self.model, CIFAR10_FC):
-            config_dict["hidden_layers"] = self.model_kwargs.get('hidden_layers')
-            config_dict["dropout_rates"] = self.model_kwargs.get('dropout_rates')
-
-        config_path = os.path.join(models_dir,  f"{self.name}_config.json")
-        with open(config_path, "w") as f:
-            json.dump(config_dict, f, indent=4)              
-            print(f"Config saved to {config_path}")
+        self.save_config(models_dir, num_epochs, early_stopping, patience)
 
         total_time = time.time() - overall_start_time
         print("\n✅ Training finished!")
@@ -480,7 +457,7 @@ class CIFAR10Classifier:
             print("⚠️ Model is not built yet.")
             return
 
-        input_size = (1, *self.input_shape)  # e.g., (1, 3, 32, 32)
+        input_size = (1, *self.model.input_shape)  # e.g., (1, 3, 32, 32)
         return summary(self.model, input_size=input_size, device=self.device)    
 # --------------------------------------------------------
 # Predictions
@@ -584,6 +561,50 @@ class CIFAR10Classifier:
 # Save and load
 # --------------------------------------------------------
 
+    def save_config(self, models_dir, num_epochs, early_stopping, patience):
+        """
+        Saves the model configuration to a JSON file.
+        """
+        model_kwargs = self.model_kwargs.copy()
+        model_kwargs.pop("activation_cls")
+        # save the config
+        config_dict = {
+            "model_name": self.name,
+            "model_type": self.model_type,
+            "model_kwargs": model_kwargs,
+            "input_shape": self.input_shape,
+            "num_classes": self.num_classes,
+            "optimizer": {
+                "name": self.optimizer_name,
+                "kwargs": self.optimizer_kwargs
+            },
+            "criterion": {
+                "name": self.criterion_name,
+                "kwargs": self.criterion_kwargs
+            },
+            "lr_scheduler": {
+                "name": self.lr_scheduler_name,
+                "kwargs": self.lr_scheduler_kwargs
+            },            
+            "device": str(self.device),
+            "num_epochs": num_epochs,
+            "early_stopping": early_stopping,
+            "patience": patience,
+            "mean": self.mean,
+            "std": self.std,
+            "augmentation": self.augmentation,
+            "grayscale": self.grayscale,
+            "resize": self.resize
+        }
+
+        #print(f"Debug: Config: {config_dict}")
+
+        config_path = os.path.join(models_dir,  f"{self.name}_config.json")
+        with open(config_path, "w") as f:
+            json.dump(config_dict, f, indent=4)              
+            print(f"Config saved to {config_path}")
+
+
     def save(self, path):
         """
         Saves model weights to disk.
@@ -605,6 +626,7 @@ class CIFAR10Classifier:
         Args:
             path (str): Path to load the model from
         """
+        assert os.path.exists(path), f"Model path does not exist: {path}"
         checkpoint = torch.load(path, map_location=self.device)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             state_dict = checkpoint["model_state_dict"]
@@ -629,37 +651,28 @@ class CIFAR10Classifier:
         """
         cfg = cls.load_config(config_path)
 
-        if "conv_layers" in cfg and "fc_layers" in cfg:
-            model_class = CIFAR10_CNN
-            model_kwargs = {
-                "conv_layers": cfg["conv_layers"],
-                "fc_layers": cfg["fc_layers"],
-                "dropout_rates": cfg.get("dropout_rates", []),
-                "activation_fn": getattr(nn, cfg.get("activation", "ReLU"))
-            }
-        else:
-            model_class = CIFAR10_FC
-            model_kwargs = {
-                "hidden_layers": cfg["hidden_layers"],
-                "dropout_rates": cfg.get("dropout_rates", []),
-                "activation_fn": getattr(nn, cfg.get("activation", "ReLU"))
-            }
+        optimizer_cfg = cfg.get("optimizer")
+        criterion_cfg = cfg.get("criterion") 
+        lr_scheduler_cfg = cfg.get("lr_scheduler")
+
         model = cls(
             name=model_name,
-            model_class=model_class,
-            model_kwargs=model_kwargs,
+            model_type=cfg.get("model_type"),
+            model_kwargs=cfg.get("model_kwargs"),
             input_shape=tuple(cfg["input_shape"]),
             num_classes=cfg["num_classes"],
-            activation_fn_name=cfg.get("activation", "ReLU"),
             device=cfg.get("device", "cpu"),
-            optimizer_name=cfg.get("optimizer", "Adam"),
-            optimizer_kwargs=cfg.get("optimizer_kwargs", {}),
-            criterion_name=cfg.get("criterion", "CrossEntropyLoss"),
-            criterion_kwargs=cfg.get("criterion_kwargs", {}),
+            optimizer_name=optimizer_cfg.get("name", "Adam"),
+            optimizer_kwargs=optimizer_cfg.get("kwargs", {}),
+            criterion_name=criterion_cfg.get("name", "CrossEntropyLoss"),
+            criterion_kwargs=criterion_cfg.get("kwargs", {}),
             mean=cfg.get("mean", config.MEAN),
             std=cfg.get("std", config.STD),
+            lr_scheduler_name=lr_scheduler_cfg.get("name", "StepLR"),
+            lr_scheduler_kwargs=lr_scheduler_cfg.get("kwargs", {}),
             augmentation=cfg.get("augmentation", config.AUGMENTATION),            
             grayscale=cfg.get("grayscale", config.GRAYSCALE),
+            resize=cfg.get("resize", config.RESIZE)
         )
         model.build_model()
         model.compile()
@@ -696,6 +709,30 @@ class CIFAR10Classifier:
         # metrics_path: path to load the metrics
         return json.load(open(metrics_path))
 
+    @classmethod
+    def build_from_config(cls, cfg):        
+        model = cls(
+            name="temp",
+            model_type=cfg.get("model_type"),
+            model_kwargs=cfg.get("model_kwargs"),
+            input_shape=tuple(cfg["input_shape"]),
+            num_classes=cfg["num_classes"],
+            device=cfg.get("device", "cpu"),
+            optimizer_name=cfg.get("optimizer", {}).get("name", "Adam"),
+            optimizer_kwargs=cfg.get("optimizer", {}).get("kwargs", {}),
+            criterion_name=cfg.get("criterion", {}).get("name", "CrossEntropyLoss"),
+            criterion_kwargs=cfg.get("criterion", {}).get("kwargs", {}),
+            lr_scheduler_name=cfg.get("lr_scheduler", {}).get("name", "StepLR"),
+            lr_scheduler_kwargs=cfg.get("lr_scheduler", {}).get("kwargs", {}),
+            mean=cfg.get("mean", config.MEAN),
+            std=cfg.get("std", config.STD),
+            augmentation=cfg.get("augmentation", config.AUGMENTATION),            
+            grayscale=cfg.get("grayscale", config.GRAYSCALE),
+            resize=cfg.get("resize", config.RESIZE)
+        )
+        model.build_model()
+        
+        return model.model
 # --------------------------------------------------------
 # Plotting
 # --------------------------------------------------------

@@ -1,5 +1,0 @@
-{
-    "model_type": "CIFAR10_FC",
-    "hidden_layers": [2048, 1024, 512, 256, 128, 64],
-    "dropout_rates": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
-}

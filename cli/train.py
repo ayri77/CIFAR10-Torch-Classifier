@@ -47,6 +47,7 @@ from torchvision import transforms
 
 from utils.utils import load_architecture
 from config import MEAN, STD, NUM_CLASSES, SPLIT_RATIO, NUM_WORKERS, PATIENCE, NUM_EPOCHS, BATCH_SIZE
+from utils.paths import MODELS_DIR, DATA_DIR, ARCHITECTURES_DIR
 from core.cifar10_classifier import CIFAR10Classifier
 from utils.data_utils import (
     compute_mean_std, get_transforms,
@@ -77,8 +78,7 @@ def parse_args():
     '''
     parser = argparse.ArgumentParser(description="Train CIFAR-10 model via CLI")
 
-    parser.add_argument('--config', type=str, help="Path to architecture config (.json)")
-    parser.add_argument('--lr', type=float, help="Learning rate override")
+    parser.add_argument('--config', type=str, help="Path to architecture config")
     parser.add_argument('--epochs', type=int, default=NUM_EPOCHS, help="Number of epochs")
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help="Batch size")
     parser.add_argument('--patience', type=int, default=PATIENCE, help="Patience")
@@ -89,10 +89,7 @@ def parse_args():
     parser.add_argument('--save_model', type=bool, default=True, help="Save model")
     parser.add_argument('--save_path', type=str, default="models", help="Save path")
     parser.add_argument('--num_workers', type=int, default=NUM_WORKERS, help="Number of workers")
-    parser.add_argument('--augmentation', type=bool, default=False, help="Augmentation")
-    parser.add_argument('--grayscale', type=bool, default=False, help="Grayscale")
-    parser.add_argument('--mixup_enabled', type=bool, default=False, help="Mixup enabled")
-    parser.add_argument('--mixup_alpha', type=float, default=0.4, help="Mixup alpha")
+
 
     return parser.parse_args()
 
@@ -104,18 +101,22 @@ def main():
 
     # Step 0: Load architecture and model class
     (
-        model_class, model_kwargs, activation_fn_name, optimizer_config, criterion_config, lr_scheduler_config, 
-        augmentation, grayscale
+        model_type, model_kwargs, optimizer_cfg, criterion_cfg, lr_scheduler_cfg, 
+        augmentation, grayscale, resize
     ) = load_architecture(args.config)
 
-    # Override values from CLI
-    augmentation = override(args.augmentation, augmentation)
-    grayscale = override(args.grayscale, grayscale)
-    if args.lr is not None:
-        optimizer_config["kwargs"]["lr"] = args.lr    
 
     # Step 1: Load raw training data (no normalization)
-    raw_dataset, _ = load_cifar10_datasets(transform=transforms.ToTensor(), subset="train")    
+    if grayscale:
+        transform_gs = transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),
+            transforms.ToTensor()
+        ])    
+    raw_dataset, _ = load_cifar10_datasets(
+        data_dir=DATA_DIR,
+        transform=transform_gs if grayscale else transforms.ToTensor(),
+        subset="train"
+    )
 
     # Step 2: Dataset info
     input_shape, num_classes = get_dataset_info(raw_dataset)
@@ -123,31 +124,40 @@ def main():
     # Step 3: Compute mean and std
     mean, std = compute_mean_std(raw_dataset)
 
-    # Step 4: Build model
-    name=os.path.splitext(os.path.basename(args.config))[0]
+    # Step 4: Build model    
     model_cls = CIFAR10Classifier(
-        name=name,
-        model_class=model_class,
+        name=args.config,
+        model_type=model_type,
         model_kwargs=model_kwargs,
         input_shape=input_shape,
-        num_classes=num_classes,
-        activation_fn_name=activation_fn_name,
-        optimizer_name=optimizer_config["name"],
-        optimizer_kwargs=optimizer_config["kwargs"],
-        criterion_name=criterion_config["name"],
-        criterion_kwargs=criterion_config["kwargs"],
-        lr_scheduler_name=lr_scheduler_config["name"],
-        lr_scheduler_kwargs=lr_scheduler_config["kwargs"],
+        num_classes=num_classes,        
+        optimizer_name=optimizer_cfg["name"],
+        optimizer_kwargs=optimizer_cfg["kwargs"],
+        criterion_name=criterion_cfg["name"],
+        criterion_kwargs=criterion_cfg["kwargs"],
+        lr_scheduler_name=lr_scheduler_cfg["name"],
+        lr_scheduler_kwargs=lr_scheduler_cfg["kwargs"],
         device=torch.device(args.device),
         mean=mean.tolist(),
         std=std.tolist(),
         augmentation=augmentation,
-        grayscale=grayscale
+        grayscale=grayscale,
+        resize=resize
     )
 
     # Step 5: Build transform and load full training set
-    full_transform = get_transforms(mean, std, args.augmentation, args.grayscale)
-    train_dataset, _ = load_cifar10_datasets(transform=full_transform, subset="train")
+    train_transform = get_transforms(
+        mean=mean,
+        std=std,
+        augmentation=augmentation,
+        grayscale=grayscale,
+        resize=resize
+    )    
+    train_dataset, _ = load_cifar10_datasets(
+        data_dir=DATA_DIR, 
+        transform=train_transform, 
+        subset="train"
+    )
 
     # Step 6: Train/val split
     train_subset, val_subset = split_train_val(train_dataset, split_ratio=SPLIT_RATIO)

@@ -1,6 +1,0 @@
-{
-    "model_type": "CIFAR10_ResNet18",
-    "optimizer": {"name": "Adam", "kwargs": {"lr": 0.001}},
-    "criterion": {"name": "CrossEntropyLoss", "kwargs": {}},
-}
-

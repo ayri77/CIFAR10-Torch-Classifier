@@ -1,132 +1,81 @@
-# CIFAR10 Torch Classifier 🧠🔥
+# CIFAR10 Torch Classifier
 
-A modular and extensible PyTorch project for training, evaluating, and comparing neural network architectures on the CIFAR-10 dataset.
+Modular PyTorch framework for reproducible experimentation with image classification architectures on CIFAR-10.
 
-## 📦 Project Status
-
-✅ Current features:
-- CIFAR-10 dataset loading and normalization
-- Config-driven training pipeline
-- Multiple model architectures (MLP, CNN)
-- Advanced data augmentation (Mixup, Cutout)
-- Reproducible training (seed, deterministic workers)
-- TensorBoard logging
-- Model saving with early stopping
-- Comprehensive evaluation pipeline
-- Model comparison utilities
-- Kaggle competition submission support
-
-## 📁 Project Structure
-
-```
-CIFAR10-Torch-Classifier/
-│
-├── architectures/          # Model architecture definitions
-│   ├── mlp.py             # MLP model implementation
-│   └── cnn.py             # CNN model implementation
-│
-├── core/                  # Core functionality
-│   ├── cifar10_classifier.py  # Main classifier class
-│   └── training.py        # Training utilities
-│
-├── utils/                 # Utility functions
-│   ├── data_utils.py      # Data loading and preprocessing
-│   ├── visualization.py   # Plotting and visualization
-│   ├── utils.py           # General utilities
-│   └── paths.py           # Path management
-│
-├── notebooks/             # Jupyter notebooks
-│   ├── train.ipynb        # Training pipeline
-│   ├── evaluate.ipynb     # Model evaluation
-│   ├── compare_models.ipynb  # Model comparison
-│   └── kaggle_competition_evaluation.ipynb  # Kaggle submission
-│
-├── models/                # Saved model checkpoints
-├── runs/                  # TensorBoard logs
-├── data/                  # Dataset storage
-├── config.py              # Configuration settings
-├── requirements.txt       # Project dependencies
-└── README.md             # This file
-```
-
-## 📦 Features
-
-### Model Architectures
-- Fully-connected network (MLP) with configurable layers
-- Convolutional Neural Network (CNN) with modern architecture
-- ResNet18 and DenseNet121 variants adapted for 32×32 inputs
-- Dropout, BatchNorm, Activation function selection
-- Customizable layer configurations
-
-### Training Features
-- Advanced data augmentation (Mixup, Cutout)
-- Learning rate scheduling
-- Multiple optimizer choices (SGD, Adam, AdamW, RMSprop, Adagrad)
-- Early stopping
-- Model checkpointing
-- TensorBoard logging (loss, accuracy, learning rate)
-- Training history visualization
-
-### Evaluation
-- Comprehensive metrics calculation
-- Confusion matrix visualization
-- Per-class performance analysis
-- Model comparison utilities
-- Kaggle competition submission support
-
-## 🚀 Getting Started
-
-1. Clone the repository:
-```bash
-git clone https://github.com/ayri77/CIFAR10-Torch-Classifier
-cd CIFAR10-Torch-Classifier
-```
-
-2. Create and activate virtual environment:
-```bash
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # Linux/Mac
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Start training:
-- Open `notebooks/train.ipynb` in Jupyter
-- Follow the instructions in the notebook
-- Monitor training progress in TensorBoard
-
-## 💾 Saving & Loading Models
-
-Use the helper methods on `CIFAR10Classifier` to persist models:
-
-```python
-classifier.save("path/to/model.pth")
-loaded = CIFAR10Classifier.load_model(
-    model_name, config_path, "path/to/model.pth"
-)
-```
-
-The `save()` method stores a checkpoint dictionary with a
-`model_state_dict` key, matching the format used during training.
-
-## 📊 Model Performance
-
-Current best results:
-- MLP: ~75% validation accuracy
-- CNN: ~80% validation accuracy
-
-## 🧩 Author
-
-Pavlo Borysov — [@ayri77](https://github.com/ayri77)
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+The project focuses on structured experimentation, architecture comparison, and scalable training workflows rather than a single benchmark score.
 
 ---
 
-Project under active development. Feedback and contributions welcome!
+## Problem
+
+Design a flexible research-oriented training framework that allows:
+
+- rapid experimentation with multiple CNN architectures
+- configurable augmentation strategies
+- reproducible training runs
+- systematic model comparison
+- structured evaluation and result tracking
+
+---
+
+## Architecture
+
+The project is organized into clearly separated modules:
+
+- **architectures/** – model definitions (MLP, CNN, ResNet18, DenseNet121 adapted for 32×32 inputs)
+- **core/** – training loop abstraction and classifier logic
+- **utils/** – data loading, augmentation, visualization, experiment utilities
+- **notebooks/** – experiment workflows (training, evaluation, comparison, Kaggle submission)
+
+Key design principles:
+
+- config-driven training
+- deterministic runs (seed control, worker control)
+- modular augmentation pipeline (Mixup, Cutout)
+- optimizer abstraction
+- learning rate scheduling
+- early stopping & checkpointing
+- TensorBoard experiment tracking
+
+---
+
+## Experimentation Capabilities
+
+- Multiple optimizers (SGD, Adam, AdamW, RMSprop, Adagrad)
+- Configurable model hyperparameters
+- Advanced augmentation strategies
+- Validation monitoring
+- Per-class evaluation and confusion matrix analysis
+- Model comparison utilities
+- Kaggle-compatible submission workflow
+
+---
+
+## Reproducibility
+
+- Explicit configuration management
+- Deterministic training setup
+- Structured experiment logging
+- Checkpoint-based model persistence
+
+---
+
+## Example Results
+
+Baseline experiments achieved:
+
+- MLP: ~75% validation accuracy
+- CNN variants: ~80–84% validation accuracy
+
+The framework is designed for extensibility (custom architectures, augmentation experiments, optimizer comparison).
+
+---
+
+## How to Run
+
+```bash
+git clone https://github.com/ayri77/CIFAR10-Torch-Classifier
+cd CIFAR10-Torch-Classifier
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
